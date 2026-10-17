@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from math import isfinite
+
 from ._env_contractions import *
+from ._ntu_metric import NTUMetric
 from .._evolution import BondMetric
 from ....tensor import tensordot, YastnError, ncon
 
 
 class EnvNTU:
-    def __init__(self, psi, which='NN'):
+    def __init__(self, psi, which='NN', metric_chunk_size=None, opts_eat=None):
         r"""
         Supports a family of NTU environments for truncation of PEPS tensors during time evolution.
         The local exact contractions, and SVD-1 approximation used in some environments,
@@ -32,7 +35,34 @@ class EnvNTU:
 
         which: str
             Type of bond environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
+
+        metric_chunk_size: int | None
+            Stream the metric in blocks of this many multiplicities on the first
+            open QR leg, keeping all bra/ket cross terms. SU(2) multiplets stay
+            intact. None retains the full metric (default). With streaming, use
+            fix_metric=None in evolution or truncation. Supports SVD and EAT
+            initializations, and NN and multi-site/NNN gate paths.
+
+        opts_eat: dict | None
+            Streaming EAT power-iteration options: relative singular-pair
+            residual ``tol`` (default 1e-10) and ``max_iter`` (default 100).
+            These are independent of the subsequent ALS optimization options.
+            Failure to converge raises YastnError without a full-metric fallback.
         """
+        if metric_chunk_size is not None and (isinstance(metric_chunk_size, bool)
+                or not isinstance(metric_chunk_size, int) or metric_chunk_size < 1):
+            raise YastnError('metric_chunk_size must be a positive integer or None.')
+        self.metric_chunk_size = metric_chunk_size
+        self.opts_eat = {'tol': 1e-10, 'max_iter': 100}
+        if opts_eat is not None:
+            if not isinstance(opts_eat, dict) or set(opts_eat) - self.opts_eat.keys():
+                raise YastnError('opts_eat accepts only tol and max_iter.')
+            self.opts_eat.update(opts_eat)
+        tol, max_iter = self.opts_eat['tol'], self.opts_eat['max_iter']
+        if isinstance(tol, bool) or not isinstance(tol, (float, int)) or not isfinite(tol) or tol <= 0:
+            raise YastnError('opts_eat["tol"] must be positive and finite.')
+        if isinstance(max_iter, bool) or not isinstance(max_iter, int) or max_iter < 1:
+            raise YastnError('opts_eat["max_iter"] must be a positive integer.')
         self.psi = psi
         self._set_which(which)
 
@@ -148,24 +178,33 @@ class EnvNTU:
                     (+3 -2)┈(+3 -1)┈(+3 +0)┈┈(+3 +1)┈(+3 +2)┈(+3 +3)
 
         """
+        if self.metric_chunk_size is not None:
+            return BondMetric(g=NTUMetric(self, Q0, Q1, s0, s1, dirn,
+                                         self.metric_chunk_size))
+        return self._bond_metric(Q0, Q1, s0, s1, dirn)
+
+    def _bond_metric(self, Q0, Q1, s0, s1, dirn, Q0_ket=None, Q1_ket=None):
+        """Build a metric block; *_ket supplies its conjugated (row) layer."""
+        Q0_ket = Q0 if Q0_ket is None else Q0_ket
+        Q1_ket = Q1 if Q1_ket is None else Q1_ket
         if self.which == 'NN':
-            return self._g_NN(Q0, Q1, s0, s1, dirn)
+            return self._g_NN(Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket)
         if self.which == 'NN+':
-            return self._g_NNp(Q0, Q1, s0, s1, dirn)
+            return self._g_NNp(Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket)
         if self.which == 'NN++':
-            return self._g_NNpp(Q0, Q1, s0, s1, dirn)
+            return self._g_NNpp(Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket)
         if self.which == 'NNN':
-            return self._g_NNN(Q0, Q1, s0, s1, dirn)
+            return self._g_NNN(Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket)
         if self.which == 'NNN+':
-            return self._g_NNNp(Q0, Q1, s0, s1, dirn)
+            return self._g_NNNp(Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket)
         if self.which == 'NNN++':
-            return self._g_NNNpp(Q0, Q1, s0, s1, dirn)
+            return self._g_NNNpp(Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket)
         if 'ladder' in self.which.lower():
-            return self._g_Ladder(Q0, Q1, s0, s1, dirn)
+            return self._g_Ladder(Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket)
         raise YastnError(f" Type of EnvNTU which={self.which} not recognized.")
 
 
-    def _g_NN(self, Q0, Q1, s0, s1, dirn):
+    def _g_NN(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
         Calculates metric tensor within "NTU-NN" approximation.
 
@@ -191,8 +230,8 @@ class EnvNTU:
             assert self.psi.nn_site(s0, (0, 1)) == s1
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
             tensors_from_psi(m, self.psi)
-            env_l = edge_l(Q0, hair_l(m[0, -1]))  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(Q1, hair_r(m[0,  2]))  # [tr tr'] [ll ll'] [br br']
+            env_l = edge_l(Q0, hair_l(m[0, -1]), A_ket=Q0_ket)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hair_r(m[0,  2]), A_ket=Q1_ket)  # [tr tr'] [ll ll'] [br br']
             ctl = cor_tl(m[-1, 0])
             ctr = cor_tr(m[-1, 1])
             cbr = cor_br(m[ 1, 1])
@@ -202,8 +241,8 @@ class EnvNTU:
             assert self.psi.nn_site(s0, (1, 0)) == s1
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,-1), (2,0), (1,1), (0,1)]}
             tensors_from_psi(m, self.psi)
-            env_t = edge_t(Q0, hair_t(m[-1, 0]))  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hair_b(m[ 2, 0]))  # [rb rb'] [tt tt'] [lb lb']
+            env_t = edge_t(Q0, hair_t(m[-1, 0]), A_ket=Q0_ket)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hair_b(m[ 2, 0]), A_ket=Q1_ket)  # [rb rb'] [tt tt'] [lb lb']
             cbl = cor_bl(m[1,-1])
             ctl = cor_tl(m[0,-1])
             ctr = cor_tr(m[0, 1])
@@ -212,7 +251,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
-    def _g_NNp(self, Q0, Q1, s0, s1, dirn):
+    def _g_NNp(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
         Calculates the metric tensor within "NTU-NN+" approximation.
 
@@ -253,8 +292,8 @@ class EnvNTU:
             hbr_b, hbr_r = cut_into_hairs(cor_br(m[1, 2]))
             hbl_l, hbl_b = cut_into_hairs(cor_bl(m[1, -1]))
 
-            env_l = edge_l(Q0, hair_l(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t, hb=hbl_b))  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(Q1, hair_r(m[0, 2], hr=hair_r(m[0, 3]), ht=htr_t, hb=hbr_b))  # [tr tr'] [ll ll'] [br br']
+            env_l = edge_l(Q0, hair_l(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t, hb=hbl_b), A_ket=Q0_ket)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hair_r(m[0, 2], hr=hair_r(m[0, 3]), ht=htr_t, hb=hbr_b), A_ket=Q1_ket)  # [tr tr'] [ll ll'] [br br']
 
             hm1p0_t, hm1p1_t = cut_into_hairs(cor_tl(m[-2, 0]) @ cor_tr(m[-2, 1]))
             hp1p1_b, hp1p0_b = cut_into_hairs(cor_br(m[2, 1]) @ cor_bl(m[2, 0]))
@@ -276,8 +315,8 @@ class EnvNTU:
             hbr_b, hbr_r = cut_into_hairs(cor_br(m[2, 1]))
             hbl_l, hbl_b = cut_into_hairs(cor_bl(m[2, -1]))
 
-            env_t = edge_t(Q0, hair_t(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l, hr=htr_r))  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0]), hl=hbl_l, hr=hbr_r))  # [rb rb'] [tt tt'] [lb lb']
+            env_t = edge_t(Q0, hair_t(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l, hr=htr_r), A_ket=Q0_ket)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0]), hl=hbl_l, hr=hbr_r), A_ket=Q1_ket)  # [rb rb'] [tt tt'] [lb lb']
 
             hp1m1_l, hp0m1_l = cut_into_hairs(cor_bl(m[1, -2]) @ cor_tl(m[0, -2]))
             hp0p1_r, hp1p1_r = cut_into_hairs(cor_tr(m[0, 2]) @ cor_br(m[1, 2]))
@@ -290,7 +329,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
-    def _g_NNpp(self, Q0, Q1, s0, s1, dirn):
+    def _g_NNpp(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
         Calculates the metric tensor within "NTU-NN++" approximation.
 
@@ -356,11 +395,11 @@ class EnvNTU:
 
             hp0m1_l = hair_l(m[0, -2], hl=hair_l(m[0, -3]), ht=hp0m2_t, hb=hp0m2_b)
             hp0m0_l = hair_l(m[0, -1], hl=hp0m1_l, ht=hp0m1_t, hb=hp0m1_b)
-            env_l = edge_l(Q0, hp0m0_l)  # [bl bl'] [rr rr'] [tl tl']
+            env_l = edge_l(Q0, hp0m0_l, A_ket=Q0_ket)  # [bl bl'] [rr rr'] [tl tl']
 
             hp0p2_r = hair_r(m[0, 3], hr=hair_r(m[0, 4]), ht=hp0p3_t, hb=hp0p3_b)
             hp0p1_r = hair_r(m[0, 2], hr=hp0p2_r, ht=hp0p2_t, hb=hp0p2_b)
-            env_r = edge_r(Q1, hp0p1_r)  # [tr tr'] [ll ll'] [br br']
+            env_r = edge_r(Q1, hp0p1_r, A_ket=Q1_ket)  # [tr tr'] [ll ll'] [br br']
 
             hm2p0_t, hm2p1_t = cut_into_hairs(cor_tl(m[-3, 0]) @ cor_tr(m[-3, 1]))
             hm1p0_t, hm1p1_t = cut_into_hairs(cor_tl(m[-2, 0], hl=hm2p0_l, ht=hm2p0_t) @ cor_tr(m[-2, 1], ht=hm2p1_t, hr=hm2p1_r))
@@ -402,11 +441,11 @@ class EnvNTU:
 
             hm1p0_t = hair_t(m[-2, 0], ht=hair_t(m[-3, 0]), hl=hm2p0_l, hr=hm2p0_r)
             hp0p0_t = hair_t(m[-1, 0], ht=hm1p0_t, hl=hm1p0_l, hr=hm1p0_r)
-            env_t = edge_t(Q0, hp0p0_t)  # [lt lt'] [bb bb'] [rt rt']
+            env_t = edge_t(Q0, hp0p0_t, A_ket=Q0_ket)  # [lt lt'] [bb bb'] [rt rt']
 
             hp2p0_b = hair_b(m[3, 0], hb=hair_b(m[4, 0]), hl=hp3p0_l, hr=hp3p0_r)
             hp1p0_b = hair_b(m[2, 0], hb=hp2p0_b, hl=hp2p0_l, hr=hp2p0_r)
-            env_b = edge_b(Q1, hp1p0_b)  # [rb rb'] [tt tt'] [lb lb']
+            env_b = edge_b(Q1, hp1p0_b, A_ket=Q1_ket)  # [rb rb'] [tt tt'] [lb lb']
 
             hp1m2_l, hp0m2_l = cut_into_hairs(cor_bl(m[1, -3]) @ cor_tl(m[0, -3]))
             hp1m1_l, hp0m1_l = cut_into_hairs(cor_bl(m[1, -2], hb=hp1m2_b, hl=hp1m2_l) @ cor_tl(m[0, -2], hl=hp0m2_l, ht=hp0m2_t))
@@ -422,7 +461,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
-    def _g_NNN(self, Q0, Q1, s0, s1, dirn):
+    def _g_NNN(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
         Calculates the metric tensor within "NTU-NNN" approximation.
 
@@ -453,7 +492,7 @@ class EnvNTU:
             ell = edge_l(m[0, -1])
             clt = cor_tl(m[-1, -1])
             elt = edge_t(m[-1, 0])
-            vecl = append_vec_tl(Q0, Q0, ell @ (clt @ elt))
+            vecl = append_vec_tl(Q0_ket, Q0, ell @ (clt @ elt))
             elb = edge_b(m[1, 0])
             clb = cor_bl(m[1, -1])
             vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
@@ -461,7 +500,7 @@ class EnvNTU:
             err = edge_r(m[0, 2])
             crb = cor_br(m[1, 2])
             erb = edge_b(m[1, 1])
-            vecr = append_vec_br(Q1, Q1, err @ (crb @ erb))
+            vecr = append_vec_br(Q1_ket, Q1, err @ (crb @ erb))
             ert = edge_t(m[-1, 1])
             crt = cor_tr(m[-1, 2])
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
@@ -475,7 +514,7 @@ class EnvNTU:
             etl = edge_l(m[0, -1])
             ctl = cor_tl(m[-1, -1])
             ett = edge_t(m[-1, 0])
-            vect = append_vec_tl(Q0, Q0, etl @ (ctl @ ett))
+            vect = append_vec_tl(Q0_ket, Q0, etl @ (ctl @ ett))
             ctr = cor_tr(m[-1, 1])
             etr = edge_r(m[0, 1])
             vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
@@ -483,7 +522,7 @@ class EnvNTU:
             ebr = edge_r(m[1, 1])
             cbr = cor_br(m[2, 1])
             ebb = edge_b(m[2, 0])
-            vecb = append_vec_br(Q1, Q1, ebr @ (cbr @ ebb))
+            vecb = append_vec_br(Q1_ket, Q1, ebr @ (cbr @ ebb))
             cbl = cor_bl(m[2, -1])
             ebl = edge_l(m[1, -1])
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
@@ -491,7 +530,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
-    def _g_NNNp(self, Q0, Q1, s0, s1, dirn):
+    def _g_NNNp(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
         Calculates the metric tensor within "NTU-NNN+" approximation.
 
@@ -534,7 +573,7 @@ class EnvNTU:
             ell = edge_l(m[0, -1], hl=hair_l(m[0, -2]))
             clt = cor_tl(m[-1, -1], hl=hair_l(m[-1, -2]), ht=hair_t(m[-2, -1]))
             elt = edge_t(m[-1, 0], ht=hair_t(m[-2, 0]))
-            vecl = append_vec_tl(Q0, Q0, ell @ (clt @ elt))
+            vecl = append_vec_tl(Q0_ket, Q0, ell @ (clt @ elt))
             elb = edge_b(m[1, 0], hb=hair_b(m[2, 0]))
             clb = cor_bl(m[1, -1], hb=hair_b(m[2, -1]), hl=hair_l(m[1, -2]))
             vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
@@ -542,7 +581,7 @@ class EnvNTU:
             err = edge_r(m[0, 2], hr=hair_r(m[0, 3]))
             crb = cor_br(m[1, 2], hr=hair_r(m[1, 3]), hb=hair_b(m[2, 2]))
             erb = edge_b(m[1, 1], hb=hair_b(m[2, 1]))
-            vecr = append_vec_br(Q1, Q1, err @ (crb @ erb))
+            vecr = append_vec_br(Q1_ket, Q1, err @ (crb @ erb))
             ert = edge_t(m[-1, 1], ht=hair_t(m[-2, 1]))
             crt = cor_tr(m[-1, 2], ht=hair_t(m[-2, 2]), hr=hair_r(m[-1, 3]))
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
@@ -559,7 +598,7 @@ class EnvNTU:
             etl = edge_l(m[0, -1], hl=hair_l(m[0, -2]))
             ctl = cor_tl(m[-1, -1], hl=hair_l(m[-1, -2]), ht=hair_t(m[-2, -1]))
             ett = edge_t(m[-1, 0], ht=hair_t(m[-2, 0]))
-            vect = append_vec_tl(Q0, Q0, etl @ (ctl @ ett))
+            vect = append_vec_tl(Q0_ket, Q0, etl @ (ctl @ ett))
             ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2]))
             etr = edge_r(m[0, 1], hr=hair_r(m[0, 2]))
             vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
@@ -567,7 +606,7 @@ class EnvNTU:
             ebr = edge_r(m[1, 1], hr=hair_r(m[1, 2]))
             cbr = cor_br(m[2, 1], hr=hair_r(m[2, 2]), hb=hair_b(m[3, 1]))
             cbb = edge_b(m[2, 0], hb=hair_b(m[3, 0]))
-            vecb = append_vec_br(Q1, Q1, ebr @ (cbr @ cbb))
+            vecb = append_vec_br(Q1_ket, Q1, ebr @ (cbr @ cbb))
             cbl = cor_bl(m[2, -1], hb=hair_b(m[3, -1]), hl=hair_l(m[2, -2]))
             ebl = edge_l(m[1, -1], hl=hair_l(m[1, -2]))
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
@@ -576,7 +615,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
-    def _g_NNNpp(self, Q0, Q1, s0, s1, dirn):
+    def _g_NNNpp(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
         Calculates the metric tensor within using "NTU-NNN++" approximation.
 
@@ -671,7 +710,7 @@ class EnvNTU:
             ell = edge_l(m[0, -1], hl=hp0m1_l)
             clt = cor_tl(m[-1, -1], hl=hm1m1_l, ht=hm1m1_t)
             elt = edge_t(m[-1, 0], ht=hm1p0_t)
-            vecl = append_vec_tl(Q0, Q0, ell @ (clt @ elt))
+            vecl = append_vec_tl(Q0_ket, Q0, ell @ (clt @ elt))
             elb = edge_b(m[1, 0], hb=hp1p0_b)
             clb = cor_bl(m[1, -1], hb=hp1m1_b, hl=hp1m1_l)
             vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
@@ -679,7 +718,7 @@ class EnvNTU:
             err = edge_r(m[0, 2], hr=hp0p2_r)
             crb = cor_br(m[1, 2], hr=hp1p2_r, hb=hp1p2_b)
             erb = edge_b(m[1, 1], hb=hp1p1_b)
-            vecr = append_vec_br(Q1, Q1, err @ (crb @ erb))
+            vecr = append_vec_br(Q1_ket, Q1, err @ (crb @ erb))
             ert = edge_t(m[-1, 1], ht=hm1p1_t)
             crt = cor_tr(m[-1, 2], ht=hm1p2_t, hr=hm1p2_r)
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
@@ -743,7 +782,7 @@ class EnvNTU:
             etl = edge_l(m[0, -1], hl=hp0m1_l)
             ctl = cor_tl(m[-1, -1], hl=hm1m1_l, ht=hm1m1_t)
             ett = edge_t(m[-1, 0], ht=hm1p0_t)
-            vect = append_vec_tl(Q0, Q0, etl @ (ctl @ ett))
+            vect = append_vec_tl(Q0_ket, Q0, etl @ (ctl @ ett))
             ctr = cor_tr(m[-1, 1], ht=hm1p1_t, hr=hm1p1_r)
             etr = edge_r(m[0, 1], hr=hp0p1_r)
             vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
@@ -751,7 +790,7 @@ class EnvNTU:
             ebr = edge_r(m[1, 1], hr=hp1p1_r)
             cbr = cor_br(m[2, 1], hr=hp2p1_r, hb=hp2p1_b)
             cbb = edge_b(m[2, 0], hb=hp2p0_b)
-            vecb = append_vec_br(Q1, Q1, ebr @ (cbr @ cbb))
+            vecb = append_vec_br(Q1_ket, Q1, ebr @ (cbr @ cbb))
             cbl = cor_bl(m[2, -1], hb=hp2m1_b, hl=hp2m1_l)
             ebl = edge_l(m[1, -1], hl=hp1m1_l)
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
@@ -760,7 +799,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
-    def _g_Ladder(self, Q0, Q1, s0, s1, dirn):
+    def _g_Ladder(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
         Calculates metric tensor within "NTU-NN" approximation.
 
@@ -798,8 +837,8 @@ class EnvNTU:
             m = {d: self.psi.nn_site(s0, d=d) for d in sites}
             tensors_from_psi(m, self.psi)
 
-            env_l = edge_l(Q0, hair_l(m[0, -1]))  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(Q1, hair_r(m[0,  2]))  # [tr tr'] [ll ll'] [br br']
+            env_l = edge_l(Q0, hair_l(m[0, -1]), A_ket=Q0_ket)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hair_r(m[0,  2]), A_ket=Q1_ket)  # [tr tr'] [ll ll'] [br br']
 
             ctl = cor_tl(m[-nn, 0])
             ctr = cor_tr(m[-nn, 1])
@@ -826,8 +865,8 @@ class EnvNTU:
 
             m = {d: self.psi.nn_site(s0, d=d) for d in sites}
             tensors_from_psi(m, self.psi)
-            env_t = edge_t(Q0, hair_t(m[-1, 0]))  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hair_b(m[ 2, 0]))  # [rb rb'] [tt tt'] [lb lb']
+            env_t = edge_t(Q0, hair_t(m[-1, 0]), A_ket=Q0_ket)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hair_b(m[ 2, 0]), A_ket=Q1_ket)  # [rb rb'] [tt tt'] [lb lb']
 
             env_tl = {ii: edge_t(m[0, -ii]) for ii in range(1, nn)}
             env_bl = {ii: edge_b(m[1, -ii]) for ii in range(1, nn)}

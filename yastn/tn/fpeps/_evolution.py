@@ -108,6 +108,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
             * ``iterations`` dict with number of iterations to converge iterative optimization.
             * ``pinv_cutoffs`` dict with optimal pinv_cutoffs for methods where pinv appears.
     """
+    _validate_metric_options(env, fix_metric, initialization, max_iter)
     psi = env.psi
     if isinstance(psi, Peps2Layers):
         psi = psi.ket
@@ -206,6 +207,7 @@ def truncate_(env, opts_svd, bond=None,
             * ``iterations`` dict with number of iterations to converge iterative optimization.
             * ``pinv_cutoffs`` dict with optimal pinv_cutoffs for methods where pinv appears.
     """
+    _validate_metric_options(env, fix_metric, initialization, max_iter)
     psi = env.psi
     if isinstance(psi, Peps2Layers):
         psi = psi.ket  # to make it work with EnvCTM and EnvBP
@@ -544,29 +546,45 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
     return (MA, MB), error2, loopiness
 
 
+def _validate_metric_options(env, fix_metric, initialization, max_iter):
+    if getattr(env, 'metric_chunk_size', None) is not None:
+        if fix_metric is not None:
+            raise YastnError('Streamed NTU metrics require fix_metric=None; full metric eigh is unavailable.')
+        if initialization not in ('SVD', 'SVD_ONLY', 'EAT', 'EAT_SVD', 'SVD_EAT'):
+            raise YastnError("Streamed NTU metrics support initialization='SVD', 'SVD_ONLY', 'EAT', 'EAT_SVD', or 'SVD_EAT'.")
+        if initialization != 'SVD_ONLY' and max_iter < 1:
+            raise YastnError('Streamed NTU optimization requires max_iter >= 1.')
+
+
 def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
-    # enforce hermiticity
-    fgf = g.g
-    fgfH = fgf.H
-    nonhermitian = (fgf - fgfH).norm() / 2
-    fgf = (fgf + fgfH) / 2
-    #
-    fgf_norm = fgf.norm()
-    info['nonhermitian_part'] = (nonhermitian / fgf_norm).item()
-    #
-    # check metric tensor eigenvalues
-    if fix_metric is not None:
-        S, U = fgf.eigh(axes=(0, 1))
-        smin = S._data.min()
-        info['min_eigenvalue'] = (smin / fgf_norm).item()
-        g_error = max(-smin, 0) + nonhermitian
-        wrong = S._data < g_error
-        info['wrong_eigenvalues'] = wrong.sum().item() / len(S._data)
-        S._data[wrong] = g_error * fix_metric
-        fgf = U @ S @ U.H
-    #
+    streamed = hasattr(g.g, 'normal_matrix')
+    if streamed:
+        fgf = g.g  # Hermiticity is enforced one pair of blocks at a time.
+    else:
+        # enforce hermiticity
+        fgf = g.g
+        fgfH = fgf.H
+        nonhermitian = (fgf - fgfH).norm() / 2
+        fgf = (fgf + fgfH) / 2
+        #
+        fgf_norm = fgf.norm()
+        info['nonhermitian_part'] = (nonhermitian / fgf_norm).item()
+        #
+        # check metric tensor eigenvalues
+        if fix_metric is not None:
+            S, U = fgf.eigh(axes=(0, 1))
+            smin = S._data.min()
+            info['min_eigenvalue'] = (smin / fgf_norm).item()
+            g_error = max(-smin, 0) + nonhermitian
+            wrong = S._data < g_error
+            info['wrong_eigenvalues'] = wrong.sum().item() / len(S._data)
+            S._data[wrong] = g_error * fix_metric
+            fgf = U @ S @ U.H
+        #
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
+    if streamed:
+        info['nonhermitian_part'] = fgf.nonhermitian_part
     RRgRR = abs(vdot(fRR, fgRR).item())
     #
     pinv_cutoffs = sorted(pinv_cutoffs)
@@ -775,15 +793,16 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     Truncate R0 @ R1 to bond dimension specified in opts_svd
     including information from a product approximation of bond metric.
     """
-    G = fgf.unfuse_legs(axes=(0, 1))
-    #
-    # rank-1 approximation
-    G0, S, G1 = svd_with_truncation(G, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
-    fid = (S.norm() / G.norm()).item()
-    eat_metric_error = (max(0., 1 - fid ** 2)) ** 0.5
-    #
-    G0 = G0.remove_leg(axis=2)
-    G1 = G1.remove_leg(axis=0)
+    if hasattr(fgf, 'eat_factors'):
+        G0, G1, eat_metric_error = fgf.eat_factors()
+    else:
+        G = fgf.unfuse_legs(axes=(0, 1))
+        # rank-1 approximation
+        G0, S, G1 = svd_with_truncation(G, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
+        fid = (S.norm() / G.norm()).item()
+        eat_metric_error = (max(0., 1 - fid ** 2)) ** 0.5
+        G0 = G0.remove_leg(axis=2)
+        G1 = G1.remove_leg(axis=0)
     #
     # make sure it is hermitian
     G0 = G0 / G0.trace().to_number()
@@ -823,23 +842,30 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
     Optimizes the matrices M0 and M1 by minimizing
     truncation error using least square optimization.
     """
-    gf = fgf.unfuse_legs(axes=0)
+    streamed = hasattr(fgf, 'normal_matrix')
+    gf = None if streamed else fgf.unfuse_legs(axes=0)
     gRR = fgRR.unfuse_legs(axes=0)
 
     for iter in range(1, max_iter+1):
         # fix M1 and optimize M0
         j0 = (gRR @ M1.H).fuse_legs(axes=[(0, 1)])
-        g0 = tensordot(M1.conj(), gf, axes=(1, 1)).fuse_legs(axes=((1, 0), 2))
-        g0 = g0.unfuse_legs(axes=1)
-        g0 = tensordot(g0, M1, axes=(2, 1)).fuse_legs(axes=(0, (1, 2)))
+        if streamed:
+            g0 = fgf.normal_matrix(M1, side=0)
+        else:
+            g0 = tensordot(M1.conj(), gf, axes=(1, 1)).fuse_legs(axes=((1, 0), 2))
+            g0 = g0.unfuse_legs(axes=1)
+            g0 = tensordot(g0, M1, axes=(2, 1)).fuse_legs(axes=(0, (1, 2)))
         error_fun = lambda x: calculate_truncation_error2(x @ M1, fgf, fRR, RRgRR)
         M0, error2, pinv_c = optimal_pinv(g0, j0, pinv_cutoffs, error_fun)
 
         # fix M0 and optimize M1
         j1 = (M0.H @ gRR).fuse_legs(axes=[(0, 1)])
-        g1 = tensordot(M0.conj(), gf, axes=(0, 0)).fuse_legs(axes=((0, 1), 2))
-        g1 = g1.unfuse_legs(axes=1)
-        g1 = tensordot(g1, M0, axes=(1, 0)).fuse_legs(axes=(0, (2, 1)))
+        if streamed:
+            g1 = fgf.normal_matrix(M0, side=1)
+        else:
+            g1 = tensordot(M0.conj(), gf, axes=(0, 0)).fuse_legs(axes=((0, 1), 2))
+            g1 = g1.unfuse_legs(axes=1)
+            g1 = tensordot(g1, M0, axes=(1, 0)).fuse_legs(axes=(0, (2, 1)))
         error_fun = lambda x: calculate_truncation_error2(M0 @ x, fgf, fRR, RRgRR)
         M1, error2, pinv_c = optimal_pinv(g1, j1, pinv_cutoffs, error_fun)
 
