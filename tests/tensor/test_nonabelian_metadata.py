@@ -50,6 +50,90 @@ def test_su2xu1_charge_containers():
         assert all(type(x) is int for x in result)
 
 
+@pytest.mark.parametrize('sym', [sym_SU2, sym_SU2xU1])
+@pytest.mark.parametrize('sign', [-1, 1])
+@pytest.mark.parametrize('prefix_size', [2, 3])
+@pytest.mark.parametrize('mode', ['full', 'masked', 'trimmed'])
+def test_prefix_fusion_metadata_selection_rules(sym, sign, prefix_size, mode):
+    """Compare metadata to explicit fusion rules, including charged tensors."""
+    from yastn.tensor._auxiliary import _struct, get_blocks, get_trimmed_struct
+    from yastn.tensor._legbasic import LegBasic
+    from yastn.tensor._merging import _meta_fuse_hard
+
+    charges = ((0,), (1,), (2,)) if sym is sym_SU2 else ((0, -1), (0, 1), (1, 0), (2, 0))
+    total = (1,) if sym is sym_SU2 else (1, 1)
+    leg = LegBasic(s=sign, t=charges, D=tuple(range(1, len(charges) + 1)))
+    struct = _struct(legs=(leg, leg.conj(), leg, leg.conj(), leg), n=total)
+    if mode == 'masked':
+        blocks = get_blocks(sym, struct)
+        struct = struct.mask_from_ind(blocks.nblocks, list(range(0, blocks.nblocks, 3)))
+    legs_sub = None
+    selected = struct
+    if mode == 'trimmed':
+        smaller = LegBasic(s=sign, t=leg.t[:-1], D=leg.D[:-1])
+        legs_sub = struct.legs[:-1] + (smaller,)
+        selected = get_trimmed_struct(sym, struct, legs_sub)
+    source = get_blocks(sym, struct)
+    selected_blocks = get_blocks(sym, selected)
+    axes = (tuple(range(prefix_size)),) + tuple((i,) for i in range(prefix_size, 5))
+    meta, size, fused, _ = _meta_fuse_hard(sym, struct, axes, legs_sub=legs_sub, lazy_threshold=1)
+    target = get_blocks(sym, fused)
+    assert len(meta) == selected_blocks.nblocks > 0
+    assert size == target.size > 0
+    by_source = {tuple(slc): i for i, slc in enumerate(source.slc)}
+    by_target = {tuple(slc): i for i, slc in enumerate(target.slc)}
+    seen = set()
+    for sln, Dn, slo, Do, subslices, subdims in meta:
+        ia, ic = by_source[(slo.start, slo.stop)], by_target[(sln.start, sln.stop)]
+        seen.add(ia)
+        old_charges = tuple(map(tuple, source.t[ia]))
+        new_charges = tuple(map(tuple, target.t[ic]))
+        assert tuple(source.D[ia]) == Do and tuple(target.D[ic]) == Dn
+        for group, charge, new_leg in zip(axes, new_charges, fused.legs):
+            outcomes = sym.signed_fusion_outcomes(
+                tuple(old_charges[i] for i in group), tuple(struct.legs[i].s for i in group), new_leg.s)
+            assert charge in outcomes
+        assert sym.can_fuse(new_charges, total, signatures=tuple(leg.s for leg in fused.legs))
+        assert target.channels[ic] == source.channels[ia][(prefix_size - 1) * sym.NSYM:]
+        assert all(s.stop - s.start == d for s, d in zip(subslices, subdims))
+    assert len(seen) == len(meta)
+
+
+@pytest.mark.parametrize('sym', [sym_SU2, sym_SU2xU1])
+@pytest.mark.parametrize('sign', [-1, 1])
+def test_empty_prefix_and_swap_metadata(sym, sign):
+    from yastn.tensor._auxiliary import _struct, get_blocks
+    from yastn.tensor._legbasic import LegBasic
+    from yastn.tensor._merging import _meta_fuse_hard, _meta_swap_adjacent_fusion_leaves
+
+    charge = (1,) if sym is sym_SU2 else (1, 1)
+    leg = LegBasic(s=sign, t=(charge,), D=(2,))
+    struct = _struct(legs=(leg, leg.conj()) * 2, n=sym.zero())
+    struct = struct.mask_from_ind(get_blocks(sym, struct).nblocks, [])
+    meta, size, _, _ = _meta_fuse_hard(sym, struct, ((0, 1), (2,), (3,)))
+    assert not meta and size == 0
+    for position in range(3):
+        _, _, meta, size = _meta_swap_adjacent_fusion_leaves(sym, struct, position)
+        assert not meta and size == 0
+
+
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+def test_masked_adjacent_swap_roundtrip(config_kwargs, sym):
+    from yastn.tensor._merging import _swap_adjacent_fusion_leaves
+
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    charges = ((0,), (1,), (2,)) if sym == 'SU2' else ((0, -1), (0, 1), (1, 0), (2, 0))
+    leg = yastn.Leg(config, s=1, t=charges, D=(1,) * len(charges))
+    a = yastn.rand(config, legs=(leg, leg.conj()) * 3, dtype='complex128')
+    a = a.remove_random_blocks(number=a.nblocks // 3, keep_legs=True)
+    assert a.nblocks > 0 and a.norm() > 0
+    for position in range(5):
+        b = _swap_adjacent_fusion_leaves(a, position)
+        restored = _swap_adjacent_fusion_leaves(b, position)
+        assert (restored - a).norm() < 1e-12
+        assert abs(b.norm() - a.norm()) < 1e-12
+
+
 @pytest.mark.parametrize('dimensions', [(2, 3, 4), (3, 4, 2), (1, 2, 1), (1, 1, 1)])
 def test_compiled_scalar_network_reuses_structure_only(dimensions):
     rng = np.random.default_rng(6)

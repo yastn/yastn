@@ -383,7 +383,6 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
     legs_new = tuple(struct.legs[i] for i in order)
     struct_new = struct.replace(legs=legs_new, channels=(), mask=None)
     bl_new = get_blocks(sym, struct_new)
-    inverse = np.asarray(np.argsort(order))
 
     # A swap only mixes one intermediate channel. Index by all unchanged
     # channels so large fusion spaces do not require a quadratic scan.
@@ -397,8 +396,13 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
     at_front = position == 0
     signs = tuple(leg.s for leg in struct.legs)
     braid_trivial = ndim == 2 and struct.legs[0].s != struct.legs[1].s
-    t_old, t_new = (np.ascontiguousarray(bl.t, dtype=np.int64) for bl in (bl_old, bl_new))
-    slc_old, D_old, D_new = bl_old.slc[:, 0].tolist(), bl_old.D.tolist(), bl_new.D.tolist()
+    t_old = np.ascontiguousarray(bl_old.t, dtype=np.int64)
+    # An adjacent transposition is its own inverse. Reorder the entire table
+    # once rather than allocating a small indexed array for every output block.
+    t_new = np.ascontiguousarray(bl_new.t[:, order, :], dtype=np.int64)
+    slc_old = bl_old.slc[:, 0].tolist()
+    D_old = tuple(map(tuple, bl_old.D.tolist()))
+    sizes_new = (bl_new.slc[:, 1] - bl_new.slc[:, 0]).tolist()
     old_by_channels, orientations = {}, {}
     for index, (charges, channel) in enumerate(zip(t_old, bl_old.channels)):
         charge_key = charges.tobytes()
@@ -411,7 +415,7 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
 
     meta, keep, offset = [], [], 0
     for out_index, (charges_new, channel_new_flat) in enumerate(zip(t_new, bl_new.channels)):
-        charge_key = charges_new[inverse].tobytes()
+        charge_key = charges_new.tobytes()
         path_new = _split_channel(channel_new_flat, nsym)
         fixed = (path_new if at_front
                  else path_new[:changed] + path_new[changed + 1:])
@@ -436,11 +440,11 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
                 coefficient = _adjacent_swap_coefficient(sym, x, left, right, z, y, yp)
             if abs(coefficient) < 1e-15:
                 continue
-            terms.append((slc_old[in_index], tuple(D_old[in_index]), float(coefficient)))
+            terms.append((slc_old[in_index], D_old[in_index], float(coefficient)))
         if terms:
             for source, shape, coefficient in terms:
                 meta.append((offset, source, shape, coefficient))
-            offset += int(np.prod(D_new[out_index]))
+            offset += sizes_new[out_index]
             keep.append(out_index)
 
     if len(keep) != bl_new.nblocks:
@@ -565,9 +569,27 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         s_eff = (1,) + s_eff[1:]
     #
     teff = np.zeros((st.nblocks, len(s_eff), sym.NSYM), dtype=np.int64)
-    if getattr(sym, 'IS_ABELIAN', True):
+    is_abelian = getattr(sym, 'IS_ABELIAN', True)
+    prefix = axes[0] if axes else ()
+    canonical_prefix = (not is_abelian and 1 < len(prefix) < len(struct.legs)
+                        and axes == (tuple(range(len(prefix))),) +
+                        tuple((i,) for i in range(len(prefix), len(struct.legs))))
+    if is_abelian:
         for n, axs in enumerate(axes):
             teff[:, n, :] = sym.fuse(st.t[:, axs, :], slegs[n], s_eff[n]) if axs else sym.zero()
+    elif canonical_prefix:
+        # A source block already satisfies the total selection rule. Collapsing
+        # its canonical prefix leaves a valid suffix tree, so no fusion-outcome
+        # enumeration or can_fuse call is needed to rediscover its outgoing irrep.
+        channels = np.asarray(st.channels, dtype=np.int64).reshape(
+            st.nblocks, (len(struct.legs) - 2) * sym.NSYM)
+        start = (len(prefix) - 2) * sym.NSYM
+        teff[:, 0, :] = channels[:, start:start + sym.NSYM]
+        if s_eff[0] == -1:
+            duals = {t: sym.conj_charge(t) for t in set(map(tuple, teff[:, 0, :].tolist()))}
+            teff[:, 0, :] = np.asarray(
+                [duals[tuple(t)] for t in teff[:, 0, :].tolist()], dtype=np.int64).reshape(st.nblocks, sym.NSYM)
+        teff[:, 1:, :] = st.t[:, len(prefix):, :]
     else:
         # Resolve branching using the selection rule of the complete output
         # block. This is exact whenever the source block has a unique fusion
@@ -641,6 +663,20 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
                     in zip(teff_split, teff, told_split, st.channels, slc, st.D)),
                    key=lambda x: (x[0], x[1], x[2], x[3]))
 
+    # Index each leg's decompositions once. A duplicate key remains ambiguous,
+    # just as in the original per-block search; never silently select one path.
+    path_lengths = tuple((len(axs) - 2) * sym.NSYM
+                         if not is_abelian and len(axs) > 2 and axs == tuple(range(len(axs)))
+                         else None for axs in axes)
+    decomposition_indices = []
+    for ls, path_len in zip(lls, path_lengths):
+        lookup = {}
+        for te, records in zip(ls.t, ls.dec):
+            for record in records:
+                key = (te, record.t, record.channel) if path_len is not None else (te, record.t)
+                lookup[key] = None if key in lookup else record
+        decomposition_indices.append(lookup)
+
     meta, tnew, cnew = [], [], []
     # ic = 0
     for tes, tn, tos, co, slo, Do in smeta:
@@ -648,29 +684,24 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         #     ic += 1
         # sln, Dn = bl_new.slc[ic], bl_new.D[ic]
 
-        ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
-        decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
-
-        jjj = []
-        for ng, (tt, dd) in enumerate(zip(tos, decs)):
-            candidates = [ii for ii, d in enumerate(dd) if d.t == tt]
-            axs = axes[ng]
-            if (not getattr(sym, 'IS_ABELIAN', True) and len(axs) > 2
-                    and tuple(axs) == tuple(range(len(axs)))):
-                path_len = (len(axs) - 2) * sym.NSYM
+        de = []
+        for ng, (te, tt, lookup, path_len) in enumerate(zip(tes, tos, decomposition_indices, path_lengths)):
+            if path_len is not None:
                 wanted = co[:path_len]
                 if s_eff[ng] == -1:
                     wanted = tuple(x for pos in range(0, path_len, sym.NSYM)
                                    for x in sym.conj_charge(wanted[pos:pos + sym.NSYM]))
-                candidates = [ii for ii in candidates if dd[ii].channel == wanted]
-            if len(candidates) != 1:
+                key = (te, tt, wanted)
+            else:
+                key = (te, tt)
+            record = lookup.get(key)
+            if record is None:
+                dd = lls[ng].dec[lls[ng].t.index(te)]
                 raise YastnError(
                     "Cannot identify a unique hard-fusion decomposition channel: "
-                    f"group={axs}, charges={tt}, source={co}, "
+                    f"group={axes[ng]}, charges={tt}, source={co}, "
                     f"paths={tuple(d.channel for d in dd)}.")
-            jjj.append(candidates[0])
-        jjj = tuple(jjj)
-        de = [dd[jj] for jj, dd in zip(jjj, decs)]
+            de.append(record)
         sub_slc = tuple(x for d in de for x in d.Dslc)
         Dsln = tuple(d.Dprod for d in de)
         tnew.append(tn)
