@@ -135,6 +135,13 @@ def make_config(**kwargs) -> _config:
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
 
+    if kwargs["sym"].NSYM == 0 :
+        if kwargs.get("tensordot_policy", None) in [None, "no_fusion"]:
+            kwargs["tensordot_policy"] = "no_fusion"
+        else:
+            warnings.warn("tensordot_policy "+kwargs["tensordot_policy"]+" selected for dense tensors (sym='none')."
+                          +"Use 'no_fusion' for dense tensors, as it avoids unnecessary data copying and overheads.")
+
     if kwargs.get("lazy_threshold", None) is None:
         if kwargs["backend"].BACKEND_ID in ["torch_cutensor",]:
             kwargs["lazy_threshold"] = 0
