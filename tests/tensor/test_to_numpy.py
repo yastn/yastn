@@ -157,6 +157,18 @@ def test_to_nonsymmetric_basic(config_kwargs):
         # Specified leg out of ndim
 
 
+def test_to_nonsymmetric_reverse(config_kwargs):
+    """ test to_nonsymmetric(key="reverse"), blocks ordered by decreasing charges """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.Tensor(config=config_U1, s=(1, -1))
+    a.set_block(ts=(0, 0), Ds=(1, 1), val=[[1]])
+    a.set_block(ts=(1, 1), Ds=(2, 2), val=[[2, 0], [0, 3]])
+    # default: charge 0 block, then charge 1 block
+    assert np.allclose(a.to_nonsymmetric().to_numpy(), np.diag([1, 2, 3]))
+    # "reverse": charge 1 block, then charge 0 block; order inside blocks is kept
+    assert np.allclose(a.to_nonsymmetric(key="reverse").to_numpy(), np.diag([2, 3, 1]))
+
+
 def _test_to_numpy_v1(tens, shapes, common_shape):
     assert all(a.to_numpy().shape == sh for a, sh in zip(tens, shapes))
 
