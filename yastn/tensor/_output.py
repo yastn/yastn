@@ -385,7 +385,7 @@ def to_dense(a, legs=None, native=False, key=None) -> 'numpy.ndarray' | 'torch.t
     Create dense tensor corresponding to the symmetric tensor.
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
-    Blocks are ordered according to increasing charges on each leg.
+    Blocks are ordered according to increasing charges on each leg, unless specified otherwise by ``key``.
     It is possible to supply a list of additional charge sectors to be included by
     explicitly specifying ``legs``.
     Specified ``legs`` should be consistent with current structure of the tensor.
@@ -400,10 +400,10 @@ def to_dense(a, legs=None, native=False, key=None) -> 'numpy.ndarray' | 'torch.t
     native: bool
         output native tensor (ignoring meta-fusion of legs).
 
-    key: Callable | None
+    key: Callable | str | None
         used in sorted(leg.charges, key=key) to fix the order of
-        blocks placement in non-symmetric tensor. The default is None,
-        where the order is ascending in values of block's charges.
+        blocks placement in non-symmetric tensor. Pass "reverse" to reverse the order of blocks.
+        The default is None, where the order is ascending in values of block's charges.
     """
     c = a.to_nonsymmetric(legs=legs, native=native, key=key)
     x = c.config.backend.clone(c._data)
@@ -439,7 +439,7 @@ def to_nonsymmetric(a, legs=None, native=False, key=None) -> 'Tensor':
     Create equivalent :class:`yastn.Tensor` with no explicit symmetry. All blocks of the original
     tensor are accumulated into a single block.
 
-    Blocks are ordered according to increasing charges on each leg.
+    Blocks are ordered according to increasing charges on each leg, unless specified otherwise by ``key``.
     It is possible to supply a list of additional charge sectors to be included by explicitly
     specifying ``legs``. These legs should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
@@ -457,10 +457,10 @@ def to_nonsymmetric(a, legs=None, native=False, key=None) -> 'Tensor':
     native: bool
         output native tensor (ignoring meta-fusion of legs).
 
-    key: Callable | None
+    key: Callable | str | None
         used in sorted(leg.charges, key=key) to fix the order of
-        blocks placement in non-symmetric tensor. The default is None,
-        where the order is ascending in values of block's charges.
+        blocks placement in non-symmetric tensor. Pass "reverse" to reverse the order of blocks.
+        The default is None, where the order is ascending in values of block's charges.
     """
     config_dense = a.config._replace(sym=sym_none)
     a = a.consume_transpose()
@@ -494,7 +494,8 @@ def to_nonsymmetric(a, legs=None, native=False, key=None) -> 'Tensor':
         for leg in legs_n:
             Dlow, tDn = 0, {}
             leg_tD = leg.tD
-            for tn in sorted(leg_tD.keys(), key=key):
+            sorted_tn = sorted(leg_tD.keys(), key=key) if key != "reverse" else sorted(leg_tD.keys(), reverse=True)
+            for tn in sorted_tn:
                 Dn = leg_tD[tn]
                 Dhigh = Dlow + Dn
                 tDn[tn] = (Dlow, Dhigh)
