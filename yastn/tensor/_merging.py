@@ -326,9 +326,29 @@ def _split_channel(channel, nsym):
                  for n in range(0, len(channel), nsym))
 
 
-@lru_cache(maxsize=16384)
 def _adjacent_swap_coefficient(sym, x, left, right, z, y, yp):
     """F^-1 R F depends on six irreps, independently of block multiplicities."""
+    if sym.SYM_ID == 'SU2xU1':
+        return _adjacent_swap_u1_cached(x, left, right, z, y, yp)
+    return _adjacent_swap_coefficient_cached(sym, x, left, right, z, y, yp)
+
+
+@register_cache(key='adjacent_swap_u1')
+@lru_cache(maxsize=4096)
+def _adjacent_swap_u1_cached(x, left, right, z, y, yp):
+    # Preserve the U1 deltas of both F symbols before sharing numerical
+    # coefficients across charge sectors. The middle charge is left+right.
+    # This full-charge LRU is independent of the numerical spin LRU below.
+    if (y[1] != x[1] + left[1] or yp[1] != x[1] + right[1]
+            or z[1] != x[1] + left[1] + right[1]):
+        return 0.0
+    from ..sym import sym_SU2
+    return _adjacent_swap_coefficient_cached(
+        sym_SU2, (x[0],), (left[0],), (right[0],), (z[0],), (y[0],), (yp[0],))
+
+
+@lru_cache(maxsize=16384)
+def _adjacent_swap_coefficient_cached(sym, x, left, right, z, y, yp):
     return sum(sym.f_symbol(x, left, right, z, y, middle)
                * sym.braiding_phase(left, right, middle)
                * sym.f_symbol(x, right, left, z, yp, middle)

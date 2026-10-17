@@ -176,17 +176,33 @@ def intertwiner(sym, charges, signs, total, channel):
     return scale(sym, charges, signs, total) * _fusion_intertwiner(sym, charges, signs, total, channel)
 
 
+def fusion_coefficient(sym, charges, signs, total, channel, grouped, out_charges, out_signs, out_channel, paths):
+    # Keep full-charge lookups in a separate LRU: U1-labelled aliases must
+    # never evict the shared spin coefficients.
+    if sym.SYM_ID == 'SU2xU1':
+        return _fusion_coefficient_u1_cached(charges, signs, total, channel, grouped,
+                                            out_charges, out_signs, out_channel, paths)
+    return _fusion_coefficient_cached(sym, charges, signs, total, channel, grouped,
+                                      out_charges, out_signs, out_channel, paths)
+
+
+@register_cache(key='nonabelian_fusion_u1')
+@lru_cache(maxsize=4096)
+def _fusion_coefficient_u1_cached(charges, signs, total, channel, grouped,
+                                  out_charges, out_signs, out_channel, paths):
+    # Charge conservation is enforced by fusion metadata. The numerical
+    # isometry is SU(2); a miss here can still hit the independent spin cache.
+    from ..sym import sym_SU2
+    return _fusion_coefficient_cached(
+        sym_SU2, tuple((t[0],) for t in charges), signs, (total[0],), channel[::2], grouped,
+        tuple((t[0],) for t in out_charges), out_signs, out_channel[::2],
+        tuple(path[::2] for path in paths))
+
+
 @register_cache(key='nonabelian_fusion_coefficient')
 @lru_cache(maxsize=65536)
-def fusion_coefficient(sym, charges, signs, total, channel, grouped, out_charges, out_signs, out_channel, paths):
-    if sym.SYM_ID == 'SU2xU1':
-        # Charge conservation is enforced by fusion metadata. Its numerical
-        # isometry is SU(2), so share coefficients across U(1) sectors.
-        from ..sym import sym_SU2
-        return fusion_coefficient(
-            sym_SU2, tuple((t[0],) for t in charges), signs, (total[0],), channel[::2], grouped,
-            tuple((t[0],) for t in out_charges), out_signs, out_channel[::2],
-            tuple(path[::2] for path in paths))
+def _fusion_coefficient_cached(sym, charges, signs, total, channel, grouped,
+                               out_charges, out_signs, out_channel, paths):
     from itertools import count
     fresh = count()
     old_labels = [next(fresh) for _ in charges]
