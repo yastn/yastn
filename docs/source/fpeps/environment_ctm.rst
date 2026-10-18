@@ -85,6 +85,15 @@ The mode is switched on per call::
     env.ctmrg_(opts_svd={'D_total': chi}, max_sweeps=100, corner_tol=1e-8,
                opts_si={'enabled': True, 'oversampling': 4, 'niter': 2})
 
+The AD-aware distributed CTM path also supports SI for simultaneous ``'h'`` and
+``'v'`` moves with a ``'2x2'`` projector method. Recycled bases and per-pair
+diagnostics follow the environment across workers; ``recycle_grad`` controls
+gradient propagation through the basis history as in serial execution. With
+``use_qr=False``, workers apply SI directly to pairs of enlarged corners without
+forming the halves. Multi-device fixed-point CTMRG uses this path for both
+forward convergence and backward linearization. Move checkpointing remains
+unsupported in the distributed AD path.
+
 Alongside the options, each projector pair accumulates its own *state* -- how many times it has been
 updated (``age``), the subspace error its bases last reported, and where those bases came from.
 That is :class:`yastn.tn.fpeps.envs.SI_state`, and it is what makes the schedule below depend on the

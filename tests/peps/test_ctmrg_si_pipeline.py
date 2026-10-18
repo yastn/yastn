@@ -37,7 +37,6 @@ from yastn.tn.fpeps.envs._env_ctm import proj_corners
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     si_proj_corners,
     si_projector_svd,
-    svd_charge_sector_values,
 )
 from yastn.tn.fpeps.envs.rdm import rdm1x1
 
@@ -257,9 +256,7 @@ def test_si_projector_identity_and_optimal_residual(config_kwargs,
 
     # Check the spectrum itself in addition to the reconstruction error, which
     # alone would not identify incorrectly ordered retained singular values.
-    si_values = np.concatenate(tuple(
-        np.asarray(values) for values in
-        svd_charge_sector_values(s_all).values()))
+    si_values = s_all.to_numpy().diagonal()
     assert np.allclose(np.sort(si_values)[::-1][:chi], values_ref[:chi],
                        rtol=2e-9, atol=2e-12)
 
@@ -524,7 +521,7 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
     recycled_ids = {id(x) for x in _si_bases(env, env.si_X).values()} | {
         id(y) for y in _si_bases(env, env.si_Y).values()}
     consumed_ids = set()
-    original = env_ctm_module.si_proj_corners
+    original = si_module.si_proj_corners
 
     def recording_si_proj_corners(*args, **kwargs):
         X = kwargs.get('X')
@@ -533,7 +530,7 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
             consumed_ids.update((id(X), id(Y)))
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(env_ctm_module, 'si_proj_corners',
+    monkeypatch.setattr(si_module, 'si_proj_corners',
                         recording_si_proj_corners)
     ages_before = dict(env._si_age)
     env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
@@ -568,7 +565,7 @@ def test_si_warmup_and_periodic_redistribution_schedule(config_kwargs,
                'redistribute_sectors': True}
     schedule = []
     refinements = []
-    original_due = env_ctm_module.redistribute_due
+    original_due = si_module.redistribute_due
     original_refinement = si_module.si_refinement
 
     def recording_due(age, opts):
@@ -580,8 +577,8 @@ def test_si_warmup_and_periodic_redistribution_schedule(config_kwargs,
         refinements.append(None)
         return original_refinement(*args, **kwargs)
 
-    # _env_ctm imports the predicate by name, so patch it where it is looked up.
-    monkeypatch.setattr(env_ctm_module, 'redistribute_due', recording_due)
+    # Patch the predicate in the shared serial/worker SI update module.
+    monkeypatch.setattr(si_module, 'redistribute_due', recording_due)
     monkeypatch.setattr(si_module, 'si_refinement', counting_refinement)
     for _ in range(5):
         env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
@@ -612,7 +609,7 @@ def test_si_disabled_path_matches_full_svd(config_kwargs, monkeypatch):
     def forbidden_si(*args, **kwargs):
         pytest.fail("Disabled SI called si_proj_corners")
 
-    monkeypatch.setattr(env_ctm_module, 'si_proj_corners', forbidden_si)
+    monkeypatch.setattr(si_module, 'si_proj_corners', forbidden_si)
     env._set_projector_pair_(site, 'hlb', site_b, 'hlt', r0, r1,
                              make_ctm_opts(opts_svd=opts_svd, opts_si={'enabled': False}))
     disabled = (env.proj[site].hlb, env.proj[site_b].hlt)

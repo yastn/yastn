@@ -19,7 +19,7 @@ import sys
 from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
-from ._env_ctm_SI_projectors import redistribute_due, si_proj_corners, SI_state
+from ._env_ctm_SI_projectors import _si_projector_pair, SI_state
 from ._ctm_opts import CTMOpts, DEFAULT_FIX_SIGNS, make_ctm_opts
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
@@ -32,6 +32,7 @@ from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 from ...._profile import nvtx_range, nsys_profile
 
 logger = logging.getLogger(__name__)
+
 
 class CTMRG_out(NamedTuple):
     sweeps: int = 0
@@ -53,6 +54,16 @@ class EnvCTM():
     #: ``EnvCTM_c4v`` overrides ``_update_core_``.
     _ts_updated_by_move= {'t': ('t',), 'l': ('l',), 'b': ('b',), 'r': ('r',),
                           'h': ('l', 'r'), 'v': ('t', 'b'), 'd': ()}
+    
+    _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
+                ('hlb', 'r', 'l', 'bl', 0, 2, 1),
+                ('hrt', 'l', 'r', 'tr', 0, 0, 1),
+                ('hrb', 'l', 'r', 'br', 2, 2, 0),
+                ('vtl', 'b', 't', 'tl', 0, 1, 1),
+                ('vtr', 'b', 't', 'tr', 2, 3, 0),
+                ('vbl', 't', 'b', 'bl', 2, 1, 0),
+                ('vbr', 't', 'b', 'br', 0, 3, 1))
+    
 
     def __init__(self, psi, init='rand', leg=None, bra=None):
         r"""
@@ -536,21 +547,6 @@ class EnvCTM():
                 H.A[nx] = self[nx, n].l.transpose(axes=(2, 1, 0))
         return H
 
-    def calculate_corner_svd(env):
-        """
-        Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
-        The corners are indexed by pair of Site and corner identifier.
-        """
-        _get_spec = lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
-        corner_sv = {}
-        for site in env.sites():
-            for dirn in env[site].fields(among=['tl', 'tr', 'bl', 'br']):
-                corner_sv[site, dirn] = _get_spec(getattr(env[site], dirn))
-        for k, v in corner_sv.items():
-            if corner_sv[k] is not None:
-                corner_sv[k] = v / v.norm(p='inf')
-        return corner_sv
-
     def _partial_svd_predict_spec(self, leg0, leg1, sU):
         # TODO externalize defaults for extending number of singular values to solve for
         """
@@ -783,26 +779,16 @@ class EnvCTM():
         else:
             si_states, key = env._si_age, (env.site2index(site0), name0)
         si_state = si_states.get(key, SI_state())
-        # Both decisions below combine user intent (options) with runtime state
-        # (this pair's age and last error), so they are derived here and passed
-        # explicitly -- rather than written back into the options dict.
-        due = redistribute_due(si_state.age, opts_si)
-        redistribute = opts_si.redistribute_sectors and due
-        skip = opts_si.skip_SI_update and not due and si_state.error < opts_si.tol
-        niter = 0 if skip else opts_si.niter
-        with nvtx_range("si_proj_corners"):
-            p0, p1, X, Y, info = si_proj_corners(r0, r1, svd_kwargs, opts_si,
-                X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
-                cutoff=opts.cutoff, redistribute=redistribute, niter=niter)
-        if niter == 0:  # keep previous error if no SI iterations were performed
-            info.update({'error': si_state.error})
+        p0, p1, X, Y, state = _si_projector_pair(
+            r0, r1, svd_kwargs, opts_si, si_state,
+            getattr(env.si_X[site0], name0), getattr(env.si_Y[site0], name0),
+            opts.cutoff)
         setattr(env.proj[site0], name0, p0)
         setattr(env.proj[site1], name1, p1)
-        recycle_grad = opts_si.recycle_grad
-        setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
-        setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
+        setattr(env.si_X[site0], name0, X)
+        setattr(env.si_Y[site0], name0, Y)
         # The age accumulates; niter and error describe this update alone.
-        si_states[key] = SI_state(age=si_state.age + 1, **info)
+        si_states[key] = state
 
     def _trivial_projectors_(env, move, sites):
         r"""
@@ -811,7 +797,7 @@ class EnvCTM():
         if move == 'h':  move = 'lr'
         if move == 'v':  move = 'tb'
         for site in sites:
-            for s0, s1, s2, s3, a0, a1, a2 in _for_trivial:
+            for s0, s1, s2, s3, a0, a1, a2 in env._for_trivial:
                 if s2 in move and getattr(env.proj[site], s0) is None:
                     site_nn = env.nn_site(site, d=s1)
                     if site_nn is not None:
@@ -981,33 +967,6 @@ class EnvCTM():
         g = g / g.trace(axes=(0, 1)).to_number()
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-    def check_corner_bond_dimension(env, disp=False):
-
-        dict_bond_dimension = {}
-        dict_symmetric_sector = {}
-        for site in env.sites():
-            if disp:
-                print(site)
-            corners = [env[site].tl, env[site].bl, env[site].br, env[site].tr]
-            corners_id = ["tl", "bl", "br", "tr"]
-            for ii in range(4):
-                dict_symmetric_sector[site, corners_id[ii]] = []
-                dict_bond_dimension[site, corners_id[ii]] = []
-                if disp:
-                    print(corners_id[ii])
-                for leg in range (0, 2):
-                    temp_t = []
-                    temp_D = []
-                    for it in range(len(corners[ii].get_legs()[leg].t)):
-                        temp_t.append(corners[ii].get_legs()[leg].t[it])
-                        temp_D.append(corners[ii].get_legs()[leg].D[it])
-                    if disp:
-                        print(temp_t)
-                        print(temp_D)
-                    dict_symmetric_sector[site, corners_id[ii]].append(temp_t)
-                    dict_bond_dimension[site, corners_id[ii]].append(temp_D)
-        return [dict_bond_dimension, dict_symmetric_sector]
-
     def iterate_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
                  iterator=None, corner_tol=None, *, opts=None, **kwargs):
         r"""
@@ -1096,7 +1055,7 @@ class EnvCTM():
             max_de = env.max_elem_diff()
             if check is not None:
                 converged, max_dsv, history = env.ctm_conv_corner_spec(history, check)
-                logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e};'
+                logger.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e};'
                              f' max_elem_modulus_diff = {max_de:0.2e}')
                 if converged:
                     break
@@ -1104,6 +1063,36 @@ class EnvCTM():
             if iterator_step and sweep % iterator_step == 0 and sweep < opts.max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
+
+    # ----- Inspection and diagnostics  --------------- 
+    #
+
+    # TODO is this function used anywhere? If not, remove it.
+    def check_corner_bond_dimension(env, disp=False):
+        dict_bond_dimension = {}
+        dict_symmetric_sector = {}
+        for site in env.sites():
+            if disp:
+                print(site)
+            corners = [env[site].tl, env[site].bl, env[site].br, env[site].tr]
+            corners_id = ["tl", "bl", "br", "tr"]
+            for ii in range(4):
+                dict_symmetric_sector[site, corners_id[ii]] = []
+                dict_bond_dimension[site, corners_id[ii]] = []
+                if disp:
+                    print(corners_id[ii])
+                for leg in range (0, 2):
+                    temp_t = []
+                    temp_D = []
+                    for it in range(len(corners[ii].get_legs()[leg].t)):
+                        temp_t.append(corners[ii].get_legs()[leg].t[it])
+                        temp_D.append(corners[ii].get_legs()[leg].D[it])
+                    if disp:
+                        print(temp_t)
+                        print(temp_D)
+                    dict_symmetric_sector[site, corners_id[ii]].append(temp_t)
+                    dict_bond_dimension[site, corners_id[ii]].append(temp_D)
+        return [dict_bond_dimension, dict_symmetric_sector]
 
     def ctm_conv_corner_spec(env: EnvCTM,
                              history: None | Sequence[dict[tuple[Site, str], Tensor]]=None,
@@ -1124,11 +1113,50 @@ class EnvCTM():
             converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
 
+    def calculate_corner_svd(env):
+        """
+        Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
+        The corners are indexed by pair of Site and corner identifier.
+        """
+        _get_spec = lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
+        corner_sv = {}
+        for site in env.sites():
+            for dirn in env[site].fields(among=['tl', 'tr', 'bl', 'br']):
+                corner_sv[site, dirn] = _get_spec(getattr(env[site], dirn))
+        for k, v in corner_sv.items():
+            if corner_sv[k] is not None:
+                corner_sv[k] = v / v.norm(p='inf')
+        return corner_sv
+
+    def _corner_sector_dims(env):
+        """Hashable charge/dimension signature of the environment corners.
+
+        Use the same corners as ``calculate_corner_svd`` and
+        ``ctm_conv_corner_spec``; transfer-tensor sectors can change on
+        different sweeps. Missing corners contribute an empty tuple.
+        """
+        out = []
+        for site in env.sites():
+            for dirn in ('tl', 'tr', 'bl', 'br'):
+                ten = getattr(env[site], dirn, None)
+                if ten is None:
+                    out.append(())
+                    continue
+                lg = ten.get_legs()[0]
+                out.append(tuple((t[0] if len(t) == 1 else t, D)
+                                 for t, D in zip(lg.t, lg.D)))
+        return tuple(out)
+
     def max_elem_diff(env: EnvCTM) -> float:
         diffs= [getattr(env.elem_diff[site], dirn) for site in env.elem_diff.sites() \
                     for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']]
         res= tuple(filter(lambda x: x is not None, diffs))
         return max(res) if len(res)>0 else float('inf')
+
+    def max_si_error(env: EnvCTM):
+        """Return the (key, SI_state) with largest error, or 'N/A' if absent."""
+        si_states = getattr(env, '_si_age', None) or {}
+        return max(si_states.items(), key=lambda item: item[1].error, default='N/A')
 
     def is_consistent(env, verbosity = 2):
         out = {}
@@ -1234,15 +1262,6 @@ def norm_diff(old: Lattice[dict[Site,EnvCTM_local]], new: Lattice[dict[Site,EnvC
                     diff= None
                 setattr(diffs[site], dirn, diff.norm(p=p) if diff is not None else None)
     return diffs
-
-_for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
-                ('hlb', 'r', 'l', 'bl', 0, 2, 1),
-                ('hrt', 'l', 'r', 'tr', 0, 0, 1),
-                ('hrb', 'l', 'r', 'br', 2, 2, 0),
-                ('vtl', 'b', 't', 'tl', 0, 1, 1),
-                ('vtr', 'b', 't', 'tr', 2, 3, 0),
-                ('vbl', 't', 'b', 'bl', 2, 1, 0),
-                ('vbr', 't', 'b', 'br', 0, 3, 1))
 
 
 def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br: Tensor, move, opts: CTMOpts):

@@ -16,40 +16,39 @@
 """[PROTOTYPE] AD-aware distributed CTM step.
 
 ``_env_ctm_dist_mp.py`` parallelizes the *forward* CTM step but detaches
-tensors at the worker boundary -- backward through it is broken. This
-module is a from-scratch reimplementation that mirrors the same three-
-stage decomposition (halves -> projectors -> env update) but **preserves
-the autograd graph in the main process** by wrapping each per-site per-
-stage computation in a custom ``torch.autograd.Function``.
+tensors at the worker boundary -- backward through it is broken. This module
+uses two dispatched stages: fused halves + projectors (Stage 12), followed by
+the environment update (Stage 3). It preserves differentiation across worker
+boundaries with custom ``torch.autograd.Function`` nodes in the main process
+and saved graphs in the workers.
 
-Pattern (same for all three stages)
------------------------------------
-1. ``apply(...)`` builds a serialized payload, dispatches a ``stageN_fwd``
-   task to a worker, and synchronously gets back output data tensors +
-   metas.
-2. ``apply(...)`` then constructs an ad-hoc ``torch.autograd.Function``
-   whose ``forward`` returns the precomputed output tensors (after
-   ``save_for_backward`` of the inputs) and whose ``backward``
-   dispatches a ``stageN_bwd`` task to the *same* worker. The worker
-   re-runs the per-site computation under ``torch.enable_grad()`` and
-   returns input gradients via ``torch.autograd.grad``.
-3. Cross-site projector flow (Stage 2 outputs feed Stage 3 inputs at
+Pattern (same for both dispatched stages)
+-----------------------------------------
+1. The main process serializes inputs and dispatches a forward task. With
+   gradients enabled, the worker computes the outputs and retains its live
+   input-to-output graph.
+2. The main process returns the precomputed outputs through a custom
+   ``torch.autograd.Function``. Its backward sends cotangents to the same
+   worker, which applies ``torch.autograd.grad`` to the saved graph.
+3. Cross-site projector flow (Stage 12 outputs feed Stage 3 inputs at
    neighboring sites) is handled by main-process autograd: the same
    yastn Tensor object is consumed by multiple Stage 3 calls, so
    gradients accumulate naturally on its ``_data`` and route back to
-   the producing Stage 2 call.
+   the producing Stage 12 call.
 
 Worker stays alive across CTM calls (and across the Neumann loop in
 ``FixedPoint.backward``), so spawn cost is paid once per optimization.
 
 Scope
 -----
-- Stages 1, 2, 3 implemented (workers + main-side Functions).
-- ``update_core_AD_`` orchestrates one CTM move via the three stages.
+- Fused Stage 12 and environment-update Stage 3 are implemented in workers
+  and bridged by main-side autograd Functions.
+- ``update_core_AD_`` orchestrates one CTM move via those two stages.
 - ``update_AD_`` runs a multi-move sweep (one CTM step in
   ``fixed_point_iter`` is one sweep with the standard 'hv' moves).
 - ``fp_update_`` is the drop-in for ``env_in.update_(...)`` inside
-  ``fixed_point_iter`` -- opt-in via ``ctm_opts_fp['fp_devices']``.
+  ``fixed_point_iter`` and selects serial or distributed execution from its
+  resolved device list.
 - DoublePepsTensor handling: serialized as bra+ket pair (op currently
   unsupported -- raises if encountered).
 """
@@ -62,6 +61,7 @@ import threading
 import time
 
 from ._ctm_opts import CTMOpts, make_ctm_opts
+from ....tensor import YastnError
 
 
 log = logging.getLogger(__name__)
@@ -212,6 +212,10 @@ class _DistCTMPool:
             p.join(timeout=10)
             if p.is_alive():
                 p.terminate()
+                # A terminated non-daemon child must still be reaped. Leaving
+                # it unjoined makes multiprocessing's interpreter-exit hook
+                # wait on the worker after our own shutdown has returned.
+                p.join(timeout=10)
         # Stop the listener only after workers are joined, so any record they
         # emitted has been enqueued before the listener drains and stops.
         from ...._mp_logging import stop_parent_log_listener
@@ -321,9 +325,10 @@ _CACHE_LIMIT = 8192
 def _shape_key(t):
     """Hashable identifier for a yastn.Tensor's structural meta. On leg_first
     the block layout (slices) is fully determined by ``struct`` (the legs);
-    together with trans/hfs/mfs this fixes the level=1 meta dict (modulo the
-    data field), so Tensors with the same key share a cache entry."""
-    return (t.struct, t.trans, t.hfs, t.mfs)
+    together with config/trans/hfs/mfs this fixes the level=1 meta dict (modulo
+    the data field). Configuration is essential: identical leg layouts can
+    describe different symmetries or fermionic statistics."""
+    return (t.config, t.struct, t.trans, t.hfs, t.mfs)
 
 
 def _split_tensor(t):
@@ -502,7 +507,7 @@ def _recv_payload(p, device=None):
 
 def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
                  log_queue=None, log_level=logging.INFO, logger_levels=None):
-    import sys, torch
+    import os, sys, torch
 
     for p in reversed(parent_sys_path):
         if p and p not in sys.path:
@@ -544,6 +549,23 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
                 saved_graphs.pop(gid, None)
             continue
         if cmd == 'empty_cache':
+            # True allocator high-water mark for THIS process. Issued once per
+            # step at the one moment the worker is idle and its peak is final,
+            # so it costs nothing and cannot be confused with a mid-stage
+            # reading. Nothing else sees this number: the energy_mp probe is a
+            # DIFFERENT process with its own allocator, and the FixedPoint
+            # backward's large tensors live here, not there. Logged BEFORE
+            # empty_cache, which would otherwise wipe the reserve figure.
+            if os.environ.get('YASTN_MEM_PROBE') and str(device).startswith('cuda'):
+                try:
+                    log.warning(
+                        "MEMPROBE ctm rank %d dev %s alloc_peak_MiB %.1f reserved_MiB %.1f",
+                        rank, device,
+                        torch.cuda.max_memory_allocated(device) / 2**20,
+                        torch.cuda.max_memory_reserved(device) / 2**20)
+                    torch.cuda.reset_peak_memory_stats(device)
+                except Exception:
+                    pass
             # Return this worker's cached-but-unused GPU blocks to the driver.
             # Issued when the worker is idle (after the FP backward's stage
             # work + drop_graphs), so the next step's forward -- which runs in
@@ -580,12 +602,15 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
 def _stage12_compute(args, extra):
     """Per-site fused halves -> projectors compute.
 
-    args = the 16 env tensors for one site's 2x2 patch.
+    args = the 16 env tensors for one site's 2x2 patch, followed by
+    recycled X/Y bases per pair when SI is enabled.
     extra = {'move': str, 'pairs': tuple[str, ...],
              'opts_svd': dict, 'kwargs': dict}.
 
     Returns a flat tuple ``(p1_pair0, p2_pair0, p1_pair1, p2_pair1, ...)``
     with two projectors per pair, in the order given by ``pairs``.
+    With SI, each pair returns ``(p0, p1, X, Y)`` and writes its updated
+    diagnostics to ``extra['si_states_out']`` for the non-tensor reply.
 
     Fusing halves and projectors into one worker call keeps a single
     autograd graph rooted at the 16 env leaves (halves are intermediate
@@ -600,24 +625,43 @@ def _stage12_compute(args, extra):
         projectors_move_rh, projectors_move_lh,
         projectors_move_tv, projectors_move_bv,
     )
+    from ._env_ctm_SI_projectors import _si_projector_pair
+    from ....tensor import qr
 
+    opts_si = extra.get('opts_si')
+    kwargs = extra.get('kwargs', {})
+    implicit = opts_si is not None and not kwargs['use_qr']
     move = extra['move']
     if any(x in move for x in 'lrh'):
-        h1, h2 = halves_4x4_lhr(args)
+        h1, h2 = halves_4x4_lhr(args[:16], implicit=implicit)
     else:
-        h1, h2 = halves_4x4_tvb(args)
+        h1, h2 = halves_4x4_tvb(args[:16], implicit=implicit)
 
     PROJ = {
         'rh': projectors_move_rh, 'lh': projectors_move_lh,
         'tv': projectors_move_tv, 'bv': projectors_move_bv,
     }
     opts_svd = extra['opts_svd']
-    kwargs = extra.get('kwargs', {})
+
+    def oriented(half, transpose):
+        if implicit:
+            return (half[1].T, half[0].T) if transpose else half
+        return qr(half, axes=(1, 0) if transpose else (0, 1))[1]
+
     outs = []
-    for pair in extra['pairs']:
-        p1, p2 = PROJ[pair](h1, h2, opts_svd, **kwargs)
-        outs.append(p1)
-        outs.append(p2)
+    states = []
+    for k, pair in enumerate(extra['pairs']):
+        if opts_si is None:
+            outs.extend(PROJ[pair](h1, h2, opts_svd, **kwargs))
+            continue
+        reverse = pair in ('lh', 'bv')
+        r0, r1 = oriented(h1, reverse), oriented(h2, not reverse)
+        p0, p1, X, Y, state = _si_projector_pair(
+            r0, r1, opts_svd, opts_si, extra['si_states'][k],
+            args[16 + 2 * k], args[17 + 2 * k], kwargs['cutoff'])
+        outs.extend((p0, p1, X, Y))
+        states.append(state)
+    extra['si_states_out'] = states if opts_si is not None else None
     return tuple(outs)
 
 
@@ -696,7 +740,7 @@ def _stage_fwd_worker_impl(cfg, device, args, compute_fn, graph_id,
         yargs = _deserialize_args(skeleton, flat_data, cfg)
         with torch.no_grad():
             outs = compute_fn(yargs, extra)
-    return _serialize_outputs(outs)
+    return (*_serialize_outputs(outs), extra.get('si_states_out'))
 
 
 # ===========================================================================
@@ -724,7 +768,7 @@ def _stage_bwd_via_saved(args, saved_graphs, device):
     cot_data = []
     for out, out_resolved, (cot_p, out_meta) in zip(
             outs, out_data_resolved, cot_payload):
-        if out is None or out_meta is None:
+        if out is None or out_meta is None or not out_resolved.requires_grad:
             continue
         out_data_pairs.append(out_resolved)
         cot_data.append(_recv_payload(cot_p, device))
@@ -835,11 +879,12 @@ def _make_batched_stage_fn(pool, stage):
     return _BatchedFn
 
 
-def _stage_apply_batched(pool, stage, jobs):
+def _stage_apply_batched(pool, stage, jobs, *, return_info=False):
     """Dispatch many per-site stage tasks concurrently and finalize.
 
     ``jobs``: list of (rank, extra, args) tuples. Returns a list of
     yastn-output lists (one per job, preserving order).
+    With ``return_info=True``, also returns per-job SI diagnostics.
 
     Forward phase: submit all per-site fwd tasks concurrently, wait
     for all results. Backward parallelism is unlocked by bundling all
@@ -875,6 +920,7 @@ def _stage_apply_batched(pool, stage, jobs):
     job_output_metas_full = []   # per-job, with None entries for boundaries
     job_live_global_idx = []     # per-job: live-output-position -> global idx (or None)
     job_args = []
+    job_info = []
 
     for rank, extra, args, skeleton, flat_data, txn in submitted:
         msg = pool.wait(txn)
@@ -882,6 +928,7 @@ def _stage_apply_batched(pool, stage, jobs):
             raise RuntimeError(f"{stage} fwd failed: {msg}")
         output_payload = msg[1]
         output_metas = msg[2]
+        job_info.append(msg[3])
         output_data = [None if a is None else _recv_payload(a)
                        for a in output_payload]
 
@@ -906,8 +953,6 @@ def _stage_apply_batched(pool, stage, jobs):
 
         batch_meta.append({
             'rank': rank,
-            'skeleton': skeleton,
-            'bwd_payload_extra': extra,
             'input_range': (in_start, in_end),
             'output_metas': live_metas_only,
             'output_global_indices': live_global_indices,
@@ -954,12 +999,29 @@ def _stage_apply_batched(pool, stage, jobs):
             out_yastn.append(Tensor.from_dict(d, config=ref_config))
         out_lists.append(out_yastn)
 
-    return out_lists
+    return (out_lists, job_info) if return_info else out_lists
 
 
 # ===========================================================================
 # Top-level orchestration
 # ===========================================================================
+
+def _projector_pair_sites(env, site, pair):
+    """Projector destinations; the first also anchors the recycled SI state."""
+    tl, tr, bl, br = (env.nn_site(site, d=d)
+                      for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
+    return {'rh': (tr, 'hrb', br, 'hrt'),
+            'lh': (tl, 'hlb', bl, 'hlt'),
+            'tv': (tl, 'vtr', tr, 'vtl'),
+            'bv': (bl, 'vbr', br, 'vbl')}[pair]
+
+
+def _si_state_slot(env, site, name):
+    """Respect uncommitted device patches just as the serial path does."""
+    if site in env._si_age_patch:
+        return env._si_age_patch[site], name
+    return env._si_age, (env.site2index(site), name)
+
 
 def update_core_AD_(env, opts, move, devices):
     """One CTM move, AD-aware distributed.
@@ -968,6 +1030,9 @@ def update_core_AD_(env, opts, move, devices):
     autograd graph in main. Mutates ``env`` in place; the new tensors
     have ``_data`` carrying autograd tracking, so backward through
     ``env``'s output env tensors flows to the original input tensors.
+
+    ``parallelism`` selects site-affine scheduling, independent intra-site
+    jobs, or automatic use of workers left idle by site parallelism.
     """
     from ._env_contractions import (
         update_env_fetch_args,
@@ -983,12 +1048,25 @@ def update_core_AD_(env, opts, move, devices):
     # 'h'/'v' moves use one site group containing all sites.
     sites_proj = list(env.sites())
 
+    parallelism = opts.parallelism
+
+    # Device normalization has already removed duplicate CUDA devices while
+    # preserving deliberately repeated CPU entries. Every pool worker is
+    # therefore active and participates in the same scheduling policy.
+    active_ranks = list(range(pool.n_workers))
+
+    use_intra_jobs = len(active_ranks) >= 2 and (
+        parallelism == 'intra_site' or
+        (parallelism == 'auto' and len(sites_proj) < len(active_ranks))
+    )
+
     # Round-robin over workers per site (deterministic given env.sites() order).
     site_to_rank = {}
 
     def _rank_for(site):
         if site not in site_to_rank:
-            site_to_rank[site] = len(site_to_rank) % pool.n_workers
+            site_to_rank[site] = active_ranks[
+                len(site_to_rank) % len(active_ranks)]
         return site_to_rank[site]
 
     # What the worker-side projector path reads. opts_svd carries the full
@@ -998,13 +1076,49 @@ def update_core_AD_(env, opts, move, devices):
     kw_proj = {'use_qr': opts.use_qr, 'cutoff': opts.cutoff,
                'profiling_mode': opts.profiling_mode}
 
-    # ----- Fused halves + projectors per site.  One worker job holds a
-    # single autograd graph from the 16 env leaves through halves to
-    # the (p1, p2) projectors of both pairs, eliminating the previous
-    # design's two-graph worker state and the halves IPC round-trip.
+    # ----- Fused halves + projectors per site. Site scheduling keeps both
+    # projector pairs in one job and one autograd graph. Intra-site scheduling
+    # emits one job per pair; this duplicates the halves computation but lets
+    # the two independent projector SVDs run concurrently. Auto scheduling
+    # splits only enough sites to occupy workers left idle by the site jobs.
     # 'h' move -> pairs (rh, lh); 'v' move -> (tv, bv).
     pairs = ('rh', 'lh') if move == 'h' else ('tv', 'bv')
     stage12_jobs = []
+    stage12_meta = []
+    projector_ranks = {}
+    stage12_rank_load = {rank: 0 for rank in active_ranks}
+    auto_split_sites = set()
+    if parallelism == 'auto':
+        spare_ranks = max(0, len(active_ranks) - len(sites_proj))
+        auto_split_sites.update(sites_proj[:spare_ranks])
+
+    def _least_loaded_stage12_rank(preferred=None):
+        min_load = min(stage12_rank_load.values())
+        candidates = [rank for rank in active_ranks
+                      if stage12_rank_load[rank] == min_load]
+        rank = preferred if preferred in candidates else candidates[0]
+        stage12_rank_load[rank] += 1
+        return rank
+
+    def stage12_job(rank, site, job_pairs, ts_args):
+        extra = {'move': move, 'pairs': job_pairs,
+                 'opts_svd': opts_svd, 'kwargs': kw_proj}
+        args = list(ts_args)
+        if opts.si_enabled:
+            from ._env_ctm_SI_projectors import SI_state
+            extra['opts_si'] = opts.opts_si
+            extra['si_states'] = []
+            for pair in job_pairs:
+                s0, name0, _, _ = _projector_pair_sites(env, site, pair)
+                states, key = _si_state_slot(env, s0, name0)
+                extra['si_states'].append(states.get(key, SI_state()))
+                args.extend((getattr(env.si_X[s0], name0),
+                             getattr(env.si_Y[s0], name0)))
+        stage12_jobs.append((rank, extra, args))
+        stage12_meta.append((site, job_pairs))
+        for pair in job_pairs:
+            projector_ranks[(site, pair)] = rank
+
     for site in sites_proj:
         tl, tr, bl, br = (env.nn_site(site, d=d)
                           for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
@@ -1014,24 +1128,34 @@ def update_core_AD_(env, opts, move, devices):
             env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
             env[br].r, env[br].br, env[br].b, env.psi[br],
         ]
-        extra = {'move': move, 'pairs': pairs,
-                 'opts_svd': opts_svd, 'kwargs': kw_proj}
-        stage12_jobs.append((_rank_for(site), extra, ts_args))
-    stage12_results = _stage_apply_batched(pool, 'stage12', stage12_jobs)
+        split_projectors = use_intra_jobs and (
+            parallelism == 'intra_site' or site in auto_split_sites)
+        if split_projectors:
+            for pair in pairs:
+                rank = _least_loaded_stage12_rank()
+                stage12_job(rank, site, (pair,), ts_args)
+        else:
+            rank = _least_loaded_stage12_rank(_rank_for(site))
+            stage12_job(rank, site, pairs, ts_args)
+    stage12_results, stage12_info = _stage_apply_batched(
+        pool, 'stage12', stage12_jobs, return_info=True)
 
-    for site, outs in zip(sites_proj, stage12_results):
-        tl, tr, bl, br = (env.nn_site(site, d=d)
-                          for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
-        for k, pair in enumerate(pairs):
-            p1, p2 = outs[2 * k], outs[2 * k + 1]
-            if pair == 'rh':
-                env.proj[tr].hrb, env.proj[br].hrt = p1, p2
-            elif pair == 'lh':
-                env.proj[tl].hlb, env.proj[bl].hlt = p1, p2
-            elif pair == 'tv':
-                env.proj[tl].vtr, env.proj[tr].vtl = p1, p2
-            elif pair == 'bv':
-                env.proj[bl].vbr, env.proj[br].vbl = p1, p2
+    for (site, job_pairs), outs, info in zip(
+            stage12_meta, stage12_results, stage12_info):
+        stride = 4 if opts.si_enabled else 2
+        for k, pair in enumerate(job_pairs):
+            s0, name0, s1, name1 = _projector_pair_sites(env, site, pair)
+            offset = stride * k
+            setattr(env.proj[s0], name0, outs[offset])
+            setattr(env.proj[s1], name1, outs[offset + 1])
+            if opts.si_enabled:
+                X, Y = outs[offset + 2:offset + 4]
+                if not opts.opts_si.recycle_grad:
+                    X, Y = X.detach(), Y.detach()
+                setattr(env.si_X[s0], name0, X)
+                setattr(env.si_Y[s0], name0, Y)
+                states, key = _si_state_slot(env, s0, name0)
+                states[key] = info[k]
 
     env._trivial_projectors_(move, sites_proj)
 
@@ -1041,10 +1165,26 @@ def update_core_AD_(env, opts, move, devices):
     sub_moves = 'lr' if move == 'h' else 'tb'
     stage3_jobs = []
     stage3_meta = []
+    stage3_rank_load = {rank: 0 for rank in active_ranks}
     for site in sites_proj:
         for mv in sub_moves:
             args = list(update_env_fetch_args(site, env, mv))
-            stage3_jobs.append((_rank_for(site), {'move': mv}, args))
+            if use_intra_jobs:
+                projector_pair = {
+                    'l': 'lh', 'r': 'rh', 't': 'tv', 'b': 'bv'
+                }[mv]
+                producer_rank = projector_ranks[(site, projector_pair)]
+                min_load = min(stage3_rank_load.values())
+                least_loaded = [
+                    rank for rank in active_ranks
+                    if stage3_rank_load[rank] == min_load
+                ]
+                rank = (producer_rank if producer_rank in least_loaded
+                        else least_loaded[0])
+                stage3_rank_load[rank] += 1
+            else:
+                rank = _rank_for(site)
+            stage3_jobs.append((rank, {'move': mv}, args))
             stage3_meta.append((site, mv))
     stage3_results = _stage_apply_batched(pool, 'stage3', stage3_jobs)
     for (site, mv), outs in zip(stage3_meta, stage3_results):
@@ -1089,19 +1229,37 @@ def _assign_stage3_outs(env, site, mv, outs):
             env[site].br = res_corner_b
 
 
+def _validate_ad_opts(opts, caller):
+    """Validate the subset implemented by the AD worker path."""
+    bad_moves = sorted(set(opts.moves) - set('hv'))
+    if bad_moves:
+        raise YastnError(
+            f"{caller} supports only simultaneous 'h' and 'v' moves; "
+            f"got moves={opts.moves!r}.")
+    if '2x2' not in opts.method:
+        raise YastnError(
+            f"{caller} supports only a 2x2 projector method; "
+            f"got method={opts.method!r}.")
+    if opts.checkpoint_move is not False:
+        raise YastnError(
+            f"{caller} does not support checkpoint_move; "
+            f"got checkpoint_move={opts.checkpoint_move!r}.")
+
+
 def update_AD_(env, opts_svd=None, moves=None, method=None, devices=None,
                *, opts=None, **kwargs):
-    """One CTM sweep, AD-aware distributed.
+    """One distributed, AD-aware CTM sweep using 2x2 ``h``/``v`` moves.
 
-    ``method`` is accepted for signature parity with the other update
-    entry points; this path is hardwired to the fused 2x2 halves.
+    Unsupported serial-path features are rejected before a worker pool is
+    created, rather than being silently ignored.
     """
     opts = make_ctm_opts(opts if opts is not None else env.default_opts,
                          opts_svd=opts_svd, moves=moves, method=method,
                          devices=devices, **kwargs)
+    _validate_ad_opts(opts, 'update_AD_')
     devices = list(opts.devices) if opts.devices else None
     if devices is None:
-        raise ValueError("update_AD_ requires devices=...")
+        raise YastnError("update_AD_ requires a non-empty devices list.")
     for mv in opts.moves:
         update_core_AD_(env, opts, mv, devices)
     return env
@@ -1122,12 +1280,9 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
       - Per-rank command queues (no shared-task-queue contention).
       - Batched per-stage dispatch.
 
-    Runs each sweep under ``torch.no_grad()`` because this is the
-    forward CTMRG convergence loop -- no backward fires through it.
-    The autograd machinery in ``update_AD_`` still runs (workers
-    capture per-stage graphs), but the corresponding ``_BatchedFn``
-    ctxs are GC'd at the end of each sweep, firing the saved-graph
-    cleanup so workers don't accumulate activations across sweeps.
+    Runs each sweep under ``torch.no_grad()`` because this is the forward
+    CTMRG convergence loop. Workers therefore skip differentiable leaves and
+    saved graphs, and the main process skips the custom autograd wrapper.
     """
     import torch
     from ._env_ctm import CTMRG_out
@@ -1135,11 +1290,12 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
     opts = make_ctm_opts(opts if opts is not None else env.default_opts,
                          opts_svd=opts_svd, moves=moves, method=method,
                          max_sweeps=max_sweeps, devices=devices, **kwargs)
+    _validate_ad_opts(opts, 'iterate_AD_')
     if not opts.devices:
-        raise ValueError("iterate_AD_ requires devices=...")
+        raise YastnError("iterate_AD_ requires a non-empty devices list.")
 
-    # Sweep-loop controls (corner_tol, iterator_step, checkpoint_move) are
-    # fields of CTMOpts, update_AD_ simply ignores what does not concern it; no deny-list is needed.
+    # Convergence is checked by the outer fixed-point loop; this generator only
+    # performs and reports the requested CTM sweeps.
     for sweep in range(1, opts.max_sweeps + 1):
         with torch.no_grad():
             update_AD_(env, opts=opts)
@@ -1154,17 +1310,17 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
 def fp_update_(env_in, ctm_opts_fp, devices=None):
     """The gauge-fixing CTM step, serial or distributed-AD.
 
-    ``devices`` selects between the two. A plain dict is still accepted for
-    ``ctm_opts_fp`` -- normalized to :class:`CTMOpts` here, with the legacy
-    ``fp_devices`` key honoured as a fallback for ``devices``.
+    ``devices`` selects between the two. Zero or one device uses the serial
+    environment update; two or more use the AD worker path. A plain options
+    dict is accepted and normalized to :class:`CTMOpts` here.
     """
     if isinstance(ctm_opts_fp, CTMOpts):
         opts = ctm_opts_fp
         devices = devices or (list(opts.devices) if opts.devices else None)
     else:
-        devices = devices or ctm_opts_fp.get('fp_devices', None)
-        opts = make_ctm_opts(**{k: v for k, v in ctm_opts_fp.items()
-                                if k != 'fp_devices'})
-    if not devices:
+        opts = make_ctm_opts(**ctm_opts_fp)
+        devices = devices or (list(opts.devices) if opts.devices else None)
+
+    if not devices or len(devices) <= 1:
         return env_in.update_(opts=opts)
     return update_AD_(env_in, opts=opts, devices=devices)
