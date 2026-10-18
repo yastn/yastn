@@ -27,6 +27,7 @@ from ..sym import sym_none
 from ._legbasic import LegBasic
 from ._yastnerror import YastnError
 from .._profile import nsys_profile
+from .._cache_registry import register_cache
 
 __all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges',
            'find_matching_indices', 'find_matching_block_keys', 'HashedMask', '_compress_slices',
@@ -318,6 +319,35 @@ def channel_rows_stats():
     return _channel_row_hits, len(_channel_rows)
 
 
+@register_cache(key='get_blocks_topology')
+@lru_cache(maxsize=128)
+@nsys_profile
+def _get_blocks_topology(sym, taxes, saxes, n):
+    """Non-Abelian channel expansion, independent of dimensions and filters.
+
+    Keys retain the symmetry, full charges, signatures and total charge.
+    Arrays are shared by structures with different D, channels or masks and
+    must remain read-only. Bound the number of retained unfiltered topologies
+    separately from the complete block-table cache.
+    """
+    tblocks, iblocks = get_blocks_charges_all(sym, taxes, saxes, n)
+    expanded_t, expanded_i, channels = [], [], []
+    for charges, coords in zip(tblocks, iblocks):
+        paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), n, saxes)
+        for path in paths:
+            expanded_t.append(charges)
+            expanded_i.append(coords)
+            channels.append(intern_channel_row(tuple(
+                x for charge in path
+                for x in (charge if isinstance(charge, tuple) else (charge,)))))
+    ndim = len(taxes)
+    tblocks = np.asarray(expanded_t, dtype=np.int64).reshape(len(expanded_t), ndim, sym.NSYM)
+    iblocks = np.asarray(expanded_i, dtype=np.int64).reshape(len(expanded_i), ndim)
+    tblocks.setflags(write=False)
+    iblocks.setflags(write=False)
+    return tblocks, iblocks, tuple(channels)
+
+
 @lru_cache(maxsize=1024)
 @nsys_profile
 def get_blocks(sym, struct) -> _blocks:
@@ -326,24 +356,11 @@ def get_blocks(sym, struct) -> _blocks:
     """
     saxes = tuple(leg.s for leg in struct.legs)
     taxes = tuple(leg.t for leg in struct.legs)
-    tblocks, iblocks = get_blocks_charges_all(sym, taxes, saxes, struct.n)
-
     if getattr(sym, 'IS_ABELIAN', True):
+        tblocks, iblocks = get_blocks_charges_all(sym, taxes, saxes, struct.n)
         channels = ((),) * len(tblocks)
     else:
-        expanded_t, expanded_i, channels = [], [], []
-        for charges, coords in zip(tblocks, iblocks):
-            paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), struct.n, saxes)
-            for path in paths:
-                expanded_t.append(charges)
-                expanded_i.append(coords)
-                # Flatten product-symmetry intermediate charges into a stable key.
-                channels.append(intern_channel_row(tuple(
-                    x for charge in path
-                    for x in (charge if isinstance(charge, tuple) else (charge,)))))
-        tblocks = np.asarray(expanded_t, dtype=np.int64).reshape(len(expanded_t), len(struct.legs), sym.NSYM)
-        iblocks = np.asarray(expanded_i, dtype=np.int64).reshape(len(expanded_i), len(struct.legs))
-        channels = tuple(channels)
+        tblocks, iblocks, channels = _get_blocks_topology(sym, taxes, saxes, struct.n)
         if struct.channels:
             allowed = set(struct.channels)
             keep = np.fromiter((path in allowed for path in channels), dtype=bool, count=len(channels))
