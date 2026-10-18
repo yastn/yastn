@@ -541,9 +541,15 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
     cid_b = locate_rows(ub, bl_c.t[:, na:, :].reshape(bl_c.nblocks, nb * nsym))
     c_keys = np.where((cid_a < len(ua)) & (cid_b < n_b), cid_a * n_b + cid_b, -1)
     order = np.argsort(c_keys, kind='stable')
-    ind_c = order[np.searchsorted(c_keys[order], unique_keys)]  # unique_keys subset of c_keys by fixpoint trimming
     if getattr(sym, 'IS_ABELIAN', True):
+        ind_c = order[np.searchsorted(c_keys[order], unique_keys)]  # unique_keys subset of c_keys by fixpoint trimming
         assert len(unique_keys) == 0 or np.array_equal(c_keys[ind_c], unique_keys), "Sanity check. Contact developers."
+    else:
+        # Non-Abelian: a produced output class may legitimately be absent from
+        # bl_c; the branch below skips those (output_classes.get -> None), so
+        # unique_keys is not a subset of c_keys here and the searchsorted lookup
+        # would run off the end of `order`. ind_c is not used in that branch.
+        ind_c = None
     #
     if (getattr(sym, 'IS_ABELIAN', True) and lazy_threshold and bl_c.nblocks
             and len(ind_c) / bl_c.nblocks < lazy_threshold):
