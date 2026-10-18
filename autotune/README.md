@@ -1,7 +1,8 @@
 # autotune
 
 Micro-benchmarks used to pick backend kernels/parameters on a given machine.
-Self-contained: nothing here imports `yastn`.
+`bench_svd_drivers.py` and `bench_nonabelian_cutensor.py` are self-contained;
+the cache benchmarks below import `yastn` from an explicit checkout (`--source`).
 
 ## `bench_svd_drivers.py` — cuSOLVER SVD driver crossover
 
@@ -85,3 +86,54 @@ sweep stopped and why.
 Output: a per-spectrum table of median times, the fitted `gesvdj -> gesvd`
 crossover (log-log interpolation of the time ratio through 1), and the worst
 singular-value error seen per driver.
+
+## Cache benchmarks (require `yastn`)
+
+These three measure the symmetric-tensor caches. They import `yastn` from the
+checkout given by `--source` (default: the repository this file lives in) and
+assert the imported path, so a stale editable install cannot silently win.
+Always compare two trees by running the same workload twice, once per `--source`.
+
+### `bench_su2_u1_cache.py` — SU(2)/U(1) split of the coefficient caches
+
+Full bond dimension 24, reduced dimension 12, 32 tensors per sweep, default cache
+sizes. The inputs share their spin content and differ only in the U(1) labels.
+Cold means `yastn.clear_cache()` before the sweep; warm repeats it immediately.
+
+```bash
+python autotune/bench_su2_u1_cache.py --rounds 7 --source /path/to/tree
+```
+
+Headline result: cold fuse 91.6 -> 78.6 ms (-14%), warm fuse unchanged,
+288 saved output arrays identical. The split does not lower the entry count in
+this workload (1980 before, 60 spin + 1920 U1 lookups after); it isolates the
+cheap U(1) lookups from the expensive coefficients.
+
+### `bench_fusion_metadata.py` — hard-fusion and adjacent-swap metadata
+
+Reduced bond dimension 12, ranks 4 and 6, SU(2) and SU(2xU1), five samples per
+phase. Cold clears the caches managed by `yastn.clear_cache()`; dependencies-warm
+keeps them, which isolates the metadata builders from the top-level builder cache.
+
+```bash
+python autotune/bench_fusion_metadata.py --rounds 5 --source /path/to/tree
+```
+
+Headline result: `fuse_hard` 1.2-1.7x on cold metadata, ~2x when only the
+dependencies are warm; swaps 1.0-1.3x cold, 1.7-2.5x warm. All 16 nonempty cases
+produce matching metadata and output-block fingerprints.
+
+### `bench_get_blocks.py` — block-table reuse across D, masks and charges
+
+Every leg has reduced `D >= 12`. The workload changes one thing at a time:
+the leg dimensions, a block mask, or the leg charges of SU(2xU1).
+
+```bash
+python autotune/bench_get_blocks.py --steps 12 --rounds 5 --source /path/to/tree
+python autotune/bench_get_blocks.py --fuse --rounds 7 --source /path/to/tree
+```
+
+Headline result with the topology cache: dimension-only and mask-only sweeps drop
+from ~30 ms to ~1 ms (12 hits, 0 misses per round), while changing the leg charges
+correctly misses every time. 1200 block fingerprints are identical across rounds.
+This is a metadata-only gain: a full NTU step at D=16 changed by about 1%.
