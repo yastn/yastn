@@ -203,6 +203,39 @@ def _fusion_coefficient_u1_cached(charges, signs, total, channel, grouped,
 @lru_cache(maxsize=65536)
 def _fusion_coefficient_cached(sym, charges, signs, total, channel, grouped,
                                out_charges, out_signs, out_channel, paths):
+    coefficient = _prefix_fusion_coefficient(sym, charges, signs, total, channel, grouped,
+                                             out_charges, out_signs, out_channel, paths)
+    if coefficient is not None:
+        return coefficient
+    return _fusion_coefficient_network(sym, charges, signs, total, channel, grouped,
+                                       out_charges, out_signs, out_channel, paths)
+
+
+def _prefix_fusion_coefficient(sym, charges, signs, total, channel, grouped,
+                               out_charges, out_signs, out_channel, paths):
+    """Orthogonality for a prefix already present in the canonical SU2 tree.
+
+    Reversing every orientation in a subtree transports the dual metric to
+    its root. Each originally positive leaf then contributes D_j**2=(-1)**2j.
+    All remaining vertices cancel against their identical partners.
+    """
+    if sym.SYM_ID != 'SU2' or not grouped:
+        return None
+    k, n = len(grouped[0]), len(charges)
+    if not 1 < k < n or grouped != (tuple(range(k)),) + tuple((i,) for i in range(k, n)):
+        return None
+    if (len(channel) != n - 2 or out_channel != channel[k - 1:]
+            or out_charges != ((channel[k - 2],),) + charges[k:]
+            or out_signs != (signs[0],) + signs[k:]
+            or paths != (channel[:k - 2],) + ((),) * (n - k)):
+        return None
+    phase = (-1.) ** sum(charges[i][0] for i in range(k) if signs[i] == 1) if signs[0] == -1 else 1.
+    return phase * scale(sym, charges, signs, total) / scale(sym, out_charges, out_signs, total)
+
+
+def _fusion_coefficient_network(sym, charges, signs, total, channel, grouped,
+                                out_charges, out_signs, out_channel, paths):
+    """General CG-network reference for groupings not covered by the fast path."""
     from itertools import count
     fresh = count()
     old_labels = [next(fresh) for _ in charges]
@@ -416,7 +449,16 @@ def _compute_fusion_weights(sym, struct, fused, axes, meta):
     out_signs = tuple(l.s for l in fused.legs)
     decompositions = []
     for group, leg in zip(axes, fused.legs):
-        decompositions.append(_leg_structure_combine_charges_prod(sym, tuple(struct.legs[j] for j in group), leg.t, leg.s) if len(group) > 1 else None)
+        if len(group) > 1:
+            dec = _leg_structure_combine_charges_prod(sym, tuple(struct.legs[j] for j in group), leg.t, leg.s)
+            lookup = {}
+            for charge, entries in zip(dec.t, dec.dec):
+                for entry in entries:
+                    # Preserve the first-match behavior of the reference search.
+                    lookup.setdefault((charge, entry.t, entry.Dslc), entry.channel)
+            decompositions.append(lookup)
+        else:
+            decompositions.append(None)
     # Cache one scalar per reduced block, not per multiplicity entry.
     weights = np.ones(old.nblocks)
     # Only these three slots are read; the cache key encodes exactly them
@@ -429,10 +471,9 @@ def _compute_fusion_weights(sym, struct, fused, axes, meta):
             if dec is None:
                 paths.append(())
             else:
-                candidates = dec.dec[dec.t.index(out_charges[i])]
                 flat = sum((charges[j] for j in group), ())
                 slcs = _freeze_pair(subslices[i])
-                paths.append(next(d.channel for d in candidates if d.t == flat and d.Dslc == slcs))
+                paths.append(dec[(out_charges[i], flat, slcs)])
         coef = fusion_coefficient(sym, charges, signs, struct.n, tuple(old.channels[ia]), axes,
                                   out_charges, out_signs, tuple(new.channels[ic]), tuple(paths))
         weights[ia] = coef

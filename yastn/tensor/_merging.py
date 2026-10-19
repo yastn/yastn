@@ -16,6 +16,7 @@ r""" Support for merging blocks in yastn.Tensor """
 from __future__ import annotations
 
 from functools import lru_cache
+from math import prod
 from itertools import groupby, product
 from operator import itemgetter
 from typing import NamedTuple, TYPE_CHECKING
@@ -310,14 +311,62 @@ def _apply_fusion_tree_transpose(a, order):
     order = tuple(order)
     if order == tuple(range(a.ndim_n)):
         return a
-    current = list(range(a.ndim_n))
+    for plan in _meta_fusion_tree_transpose(a.config.sym, a.struct, order):
+        a = _apply_recoupling(a, *plan)
+    return a
+
+
+@register_cache(key='fusion_tree_transpose')
+@lru_cache(maxsize=32)
+def _meta_fusion_tree_transpose(sym, struct, order):
+    """Compose adjacent swaps when the combined sparse map remains small.
+
+    Only structural coefficients and offsets are cached. The final structure
+    is exactly the sequential one, including masked channels and zero blocks.
+    Fall back to the original steps if composition would increase element
+    work or exceed the bounded metadata construction budget.
+    """
+    current = list(range(len(order)))
+    steps = []
     for destination, leaf in enumerate(order):
         source = current.index(leaf)
         while source > destination:
-            a = _swap_adjacent_fusion_leaves(a, source - 1)
+            plan = _meta_swap_adjacent_fusion_leaves(sym, struct, source - 1)
+            steps.append(plan)
+            struct = plan[0]
             current[source - 1], current[source] = current[source], current[source - 1]
             source -= 1
-    return a
+    if len(steps) < 2:
+        return tuple(steps)
+    _, combined_order, combined, _ = steps[0]
+    total_terms = sum(len(step[2]) for step in steps)
+    budget = min(65536, total_terms)
+    for _, next_order, next_meta, _ in steps[1:]:
+        incoming = {}
+        for destination, source, shape, coefficient in combined:
+            incoming.setdefault(destination, []).append((source, shape, coefficient))
+        merged, products = {}, 0
+        for destination, middle, _, right in next_meta:
+            for source, shape, left in incoming.get(middle, ()):
+                products += 1
+                if products > 4 * budget:
+                    return tuple(steps)
+                key = (destination, source)
+                if key in merged:
+                    old_shape, value = merged[key]
+                    merged[key] = (old_shape, value + left * right)
+                else:
+                    merged[key] = (shape, left * right)
+                    if len(merged) > budget:
+                        return tuple(steps)
+        combined = tuple((destination, source, shape, coefficient)
+                         for (destination, source), (shape, coefficient) in merged.items()
+                         if coefficient != 0.)
+        combined_order = tuple(combined_order[i] for i in next_order)
+    old_work = sum(prod(record[2]) for step in steps for record in step[2])
+    if sum(prod(record[2]) for record in combined) >= old_work:
+        return tuple(steps)
+    return ((steps[-1][0], combined_order, combined, steps[-1][3]),)
 
 
 @lru_cache(maxsize=1 << 18)

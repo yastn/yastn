@@ -15,9 +15,10 @@ def test_fusion_tree_cache_reuses_structure(config_kwargs, sym):
     first = a.transpose(order).consume_transpose()
     second = (a * 2).transpose(order).consume_transpose()
     assert (second - first * 2).norm() < 1e-12
-    assert yastn.get_cache_info()['fusion_tree_adjacent_swap'].hits > 0
+    assert yastn.get_cache_info()['fusion_tree_transpose'].hits > 0
     yastn.clear_cache()
     assert yastn.get_cache_info()['fusion_tree_adjacent_swap'].currsize == 0
+    assert yastn.get_cache_info()['fusion_tree_transpose'].currsize == 0
 
 
 @pytest.mark.parametrize('dtype', ['float64', 'complex128'])
