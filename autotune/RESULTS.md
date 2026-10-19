@@ -41,8 +41,7 @@ SU2xU1 NTU to slow down: 2.61 s baseline versus 3.05 s with all changes.
 Reverse-order ablation reproduced this. A capacity comparison found a working
 set of 75 plans: 32 entries caused 75 new misses per update; 128 entries had
 no new misses after warmup and reduced the warm median from 2.98 to 2.35 s.
-The 128-entry capacity is an explicit runtime experiment; the current default
-is still 32. Choosing and validating the final default remains outstanding.
+The default is now 128 entries (`fusion_tree_transpose` in `_merging.py`).
 
 Correctness suites: NumPy CPU 343 passed; Torch CPU with strict host conversion
 347 passed; Torch CUDA 476 passed. Hubbard quickstarts were explicitly enabled;

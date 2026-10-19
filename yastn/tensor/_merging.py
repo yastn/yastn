@@ -317,7 +317,7 @@ def _apply_fusion_tree_transpose(a, order):
 
 
 @register_cache(key='fusion_tree_transpose')
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=128)
 def _meta_fusion_tree_transpose(sym, struct, order):
     """Compose adjacent swaps when the combined sparse map remains small.
 
