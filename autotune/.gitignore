@@ -1,0 +1,9 @@
+# Keep generated benchmark data out of source control.
+/results*/
+*.jsonl
+*.csv
+*.npz
+*.pt
+*_crossover.json
+*.cprof
+*.prof
