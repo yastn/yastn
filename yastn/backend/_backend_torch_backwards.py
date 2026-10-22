@@ -14,6 +14,7 @@
 # ==============================================================================
 """Support of torch as a data structure used by yastn."""
 from types import SimpleNamespace
+from collections import OrderedDict
 from typing import Sequence
 from functools import lru_cache
 import numpy as np
@@ -123,63 +124,132 @@ class kernel_svds_scipy(torch.autograd.Function):
         return None,None,None,None,None,None
 
 
+class _MatrixBlocks:
+    """Lazily permute/promote blocks with a bounded cache of materialized data."""
+
+    max_bytes = 8 << 20
+
+    def __init__(self, data, reshape, order, dtype):
+        self.data, self.reshape, self.order, self.dtype = data, reshape, order, dtype
+        self.cache = OrderedDict()
+        self.nbytes = 0
+        self.element_size = torch.empty((), dtype=dtype).element_size()
+
+    def __getitem__(self, index):
+        if index in self.cache:
+            self.cache.move_to_end(index)
+            return self.cache[index]
+        sl, shape, rows, cols = self.reshape[index]
+        # Evict before allocating a new permutation or dtype conversion.
+        size = (sl.stop - sl.start) * self.element_size
+        while self.cache and self.nbytes + size > self.max_bytes:
+            _, old = self.cache.popitem(last=False)
+            self.nbytes -= old.numel() * old.element_size()
+            del old
+        block = self.data[sl].view(shape).permute(self.order).reshape(rows, cols).to(self.dtype)
+        if size <= self.max_bytes:
+            self.cache[index] = block
+            self.nbytes += size
+        return block
+
+
+def _save_contraction_inputs(ctx, data_A, data_B):
+    # Each derivative needs only the opposite operand's values.
+    ctx.save_for_backward(data_A if ctx.needs_input_grad[1] else None,
+                          data_B if ctx.needs_input_grad[0] else None)
+    ctx.input_specs = ((data_A.numel(), data_A.dtype), (data_B.numel(), data_B.dtype))
+    ctx.promoted_dtype = torch.promote_types(data_A.dtype, data_B.dtype)
+
+
+def _transpose_dot_gradient(gradient, other, meta, reshape, other_reshape,
+                            order, other_order, input_spec, dtype, side):
+    """Accumulate one input block at a time, then write its original layout."""
+    size, target_dtype = input_spec
+    allocate = torch.empty if _blocks_tile(reshape, size) else torch.zeros
+    result = allocate(size, dtype=target_dtype, device=gradient.device)
+    blocks = _MatrixBlocks(other, other_reshape, other_order, dtype)
+    records = [[] for _ in reshape]
+    for record in meta:
+        records[record[2 + side]].append(record)
+    inverse_order = tuple(np.argsort(order))
+    for (sl, shape, rows, cols), terms in zip(reshape, records):
+        if not terms:
+            result[sl] = 0
+            continue
+        acc = torch.zeros((rows, cols), dtype=dtype, device=gradient.device)
+        for record in terms:
+            slc, Dc, ta, tb = record[:4]
+            coefficient = record[4] if len(record) > 4 else 1
+            Cb = gradient[slc].view(Dc).to(dtype)
+            if side == 0:
+                acc.addmm_(Cb, blocks[tb].adjoint(), alpha=coefficient)
+            else:
+                acc.addmm_(blocks[ta].adjoint(), Cb, alpha=coefficient)
+            del Cb
+        permuted_shape = tuple(shape[n] for n in order)
+        result[sl].view(shape).copy_(
+            _project_grad_dtype(acc.reshape(permuted_shape).permute(inverse_order), target_dtype))
+        del acc
+    return result
+
+
 class kernel_dot(torch.autograd.Function):
     @staticmethod
     def forward(data_A, data_B, meta, size_C):
         dtype = torch.promote_types(data_A.dtype, data_B.dtype)
-        if dtype != data_A.dtype:
-            data_A = data_A.to(dtype=dtype)
-        if dtype != data_B.dtype:
-            data_B = data_B.to(dtype=dtype)
         newdata = torch.zeros((size_C,), dtype=dtype, device=data_A.device)
         for slc, Dc, sla, Da, slb, Db in meta:
-            newdata[slc].view(Dc)[:] = data_A[sla].view(Da) @ data_B[slb].view(Db)
+            torch.mm(data_A[sla].view(Da).to(dtype), data_B[slb].view(Db).to(dtype),
+                     out=newdata[slc].view(Dc))
         return newdata
 
     @staticmethod
     def setup_context(ctx, inputs, output):
         data_A, data_B, meta, _ = inputs
-        ctx.save_for_backward(data_A, data_B)
+        _save_contraction_inputs(ctx, data_A, data_B)
         ctx.meta= meta
 
     @staticmethod
     def backward(ctx, data_C_b):
-        # adjoint of block-sparse matrix-matrix multiplication A.B = C
-        # A_b = C_b.B^T ; B_b = A^T . C_b
         data_A, data_B = ctx.saved_tensors
-        data_A_dtype, data_B_dtype = data_A.dtype, data_B.dtype
-        dtype = torch.promote_types(data_A.dtype, data_B.dtype)
-        data_A_b = torch.zeros_like(data_A, dtype=dtype)
-        data_B_b = torch.zeros_like(data_B, dtype=dtype)
-        if dtype != data_A.dtype:
-            data_A = data_A.to(dtype=dtype)
-        if dtype != data_B.dtype:
-            data_B = data_B.to(dtype=dtype)
-        for slc, Dc, sla, Da, slb, Db in ctx.meta:
-            Ab = data_A_b[sla].view(Da)
-            Bb = data_B_b[slb].view(Db)
-            Cb = data_C_b[slc].view(Dc)
-            B = data_B[slb].view(Db)
-            A = data_A[sla].view(Da)
-            Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
-            Bb += A.adjoint() @ Cb
-        # project gradients back to each input's dtype (real+complex mixes)
-        data_A_b = _project_grad_dtype(data_A_b, data_A_dtype)
-        data_B_b = _project_grad_dtype(data_B_b, data_B_dtype)
-        return data_A_b, data_B_b, None, None
+        dtype = ctx.promoted_dtype
+        gradients = []
+        for side, (size, target_dtype) in enumerate(ctx.input_specs):
+            if not ctx.needs_input_grad[side]:
+                gradients.append(None)
+                continue
+            result = torch.zeros(size, dtype=target_dtype, device=data_C_b.device)
+            records = {}
+            for record in ctx.meta:
+                sl, shape = record[2:4] if side == 0 else record[4:6]
+                records.setdefault((sl.start, sl.stop, shape), []).append(record)
+            for (start, stop, shape), terms in records.items():
+                out = result[start:stop].view(shape)
+                # Keep mixed-precision sums in the promoted dtype until the whole
+                # block is accumulated; casting individual terms loses cancellation.
+                acc = out if target_dtype == dtype else torch.zeros(
+                    shape, dtype=dtype, device=data_C_b.device)
+                for slc, Dc, sla, Da, slb, Db in terms:
+                    Cb = data_C_b[slc].view(Dc).to(dtype)
+                    if side == 0:
+                        acc.addmm_(Cb, data_B[slb].view(Db).to(dtype).adjoint())
+                    else:
+                        acc.addmm_(data_A[sla].view(Da).to(dtype).adjoint(), Cb)
+                    del Cb
+                if target_dtype != dtype:
+                    out.add_(_project_grad_dtype(acc, target_dtype))
+                del out, acc
+            gradients.append(result)
+        return *gradients, None, None
 
 
 class kernel_transpose_dot_sum(torch.autograd.Function):
     @staticmethod
     def forward(data_A, data_B, meta, reshape_A, reshape_B, order_A, order_B, size_C):
         dtype = torch.promote_types(data_A.dtype, data_B.dtype)
-        if dtype != data_A.dtype:
-            data_A = data_A.to(dtype=dtype)
-        if dtype != data_B.dtype:
-            data_B = data_B.to(dtype=dtype)
         data_C = torch.zeros((size_C,), dtype=dtype, device=data_A.device)
-        At = {ii: data_A[slo].view(Do).permute(order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_A)}
-        Bt = {ii: data_B[slo].view(Do).permute(order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_B)}
+        At = _MatrixBlocks(data_A, reshape_A, order_A, dtype)
+        Bt = _MatrixBlocks(data_B, reshape_B, order_B, dtype)
         for record in meta:
             sln, Dn, ta, tb = record[:4]
             coef = record[4] if len(record) > 4 else 1
@@ -191,7 +261,7 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
     @staticmethod
     def setup_context(ctx, inputs, output):
         data_A, data_B, meta, reshape_A, reshape_B, order_A, order_B, _ = inputs
-        ctx.save_for_backward(data_A, data_B)
+        _save_contraction_inputs(ctx, data_A, data_B)
         ctx.meta = meta
         ctx.reshape_A = reshape_A
         ctx.reshape_B = reshape_B
@@ -200,58 +270,16 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, data_C_b):
-        # adjoint of block-sparse matrix-matrix multiplication A . B = C
-        # A_b = C_b . B^T ; B_b = A^T . C_b
         data_A, data_B = ctx.saved_tensors
-        data_A_dtype, data_B_dtype = data_A.dtype, data_B.dtype
-        promoted_dtype = torch.promote_types(torch.promote_types(data_A_dtype, data_B_dtype), data_C_b.dtype)
-        inv_order_A = tuple(np.argsort(ctx.order_A))
-        inv_order_B = tuple(np.argsort(ctx.order_B))
-
-        if promoted_dtype != data_A.dtype:
-            data_A = data_A.to(dtype=promoted_dtype)
-        if promoted_dtype != data_B.dtype:
-            data_B = data_B.to(dtype=promoted_dtype)
-        if promoted_dtype != data_C_b.dtype:
-            data_C_b = data_C_b.to(dtype=promoted_dtype)
-
-        At = {ii: data_A[slo].view(Do).permute(ctx.order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
-        Bt = {ii: data_B[slo].view(Do).permute(ctx.order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
-        # Block accumulators are (Dl, Dr) views into a single buffer laid out like the input:
-        # one allocation and one zero-fill instead of one per block.
-        acc_A = torch.zeros_like(data_A)
-        acc_B = torch.zeros_like(data_B)
-        At_b = {ii: acc_A[slo].view(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
-        Bt_b = {ii: acc_B[slo].view(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
-
-        for record in ctx.meta:
-            sln, Dn, ta, tb = record[:4]
-            coef = record[4] if len(record) > 4 else 1
-            tmp = data_C_b[sln].view(Dn)
-            At_b[ta].addmm_(tmp, Bt[tb].adjoint(), alpha=coef)
-            Bt_b[tb].addmm_(At[ta].adjoint(), tmp, alpha=coef)
-        del At, Bt   # permuted copies of the inputs are dead once the GEMMs are done
-
-        # Permute each accumulated block back into the input layout. Every block is assigned (blocks
-        # that no meta entry touches carry the zeros of acc_*), so the output needs zero-init only
-        # where the blocks leave gaps in the flat data. Each accumulator is released as soon as its
-        # gradient is built, so the two sides never hold four full-size buffers at once.
-        data_A_b = torch.empty_like(data_A) if _blocks_tile(ctx.reshape_A, data_A.numel()) else torch.zeros_like(data_A)
-        for v, (sl, Di, _, _) in zip(At_b.values(), ctx.reshape_A):
-            inv_Di = tuple(Di[n] for n in ctx.order_A)
-            data_A_b[sl].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_order_A)
-        del acc_A, At_b
-
-        data_B_b = torch.empty_like(data_B) if _blocks_tile(ctx.reshape_B, data_B.numel()) else torch.zeros_like(data_B)
-        for v, (sl, Di, _, _) in zip(Bt_b.values(), ctx.reshape_B):
-            inv_Di = tuple(Di[n] for n in ctx.order_B)
-            data_B_b[sl].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_order_B)
-        del acc_B, Bt_b
-
-        # project gradients back to each input's dtype (real+complex mixes)
-        data_A_b = _project_grad_dtype(data_A_b, data_A_dtype)
-        data_B_b = _project_grad_dtype(data_B_b, data_B_dtype)
-
+        data_A_b = data_B_b = None
+        if ctx.needs_input_grad[0]:
+            data_A_b = _transpose_dot_gradient(
+                data_C_b, data_B, ctx.meta, ctx.reshape_A, ctx.reshape_B,
+                ctx.order_A, ctx.order_B, ctx.input_specs[0], ctx.promoted_dtype, 0)
+        if ctx.needs_input_grad[1]:
+            data_B_b = _transpose_dot_gradient(
+                data_C_b, data_A, ctx.meta, ctx.reshape_B, ctx.reshape_A,
+                ctx.order_B, ctx.order_A, ctx.input_specs[1], ctx.promoted_dtype, 1)
         return data_A_b, data_B_b, None, None, None, None, None, None
 
 

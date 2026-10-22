@@ -21,11 +21,15 @@ import tapp_torch
 from .._cache_registry import register_cache
 from .._profile import nsys_profile
 from .backend_torch import *
+from ._backend_torch_backwards import _project_grad_dtype
 
 
 BACKEND_ID = "torch_cutensor"
 
 from tapp_torch.ops import descriptor_cache_stats, plan_cache_stats
+
+
+_PACK_CHUNK = 1 << 20
 
 
 @register_cache(key='cutensor_nonabelian_packing')
@@ -38,15 +42,16 @@ def _packing_parameters(slices, device):
     for (start, _), length in zip(slices, lengths):
         shifts.append(start - offset)
         offset += length
-    return (torch.tensor(lengths, dtype=torch.int64, device=device),
+    return (torch.tensor(lengths, dtype=torch.int64, device=device).cumsum(0),
             torch.tensor(shifts, dtype=torch.int64, device=device), offset,
             all(shift == 0 for shift in shifts))
 
 
-def _slice_indices(lengths, shifts, size):
-    # output_size avoids a GPU-to-host synchronization in repeat_interleave.
-    return (torch.arange(size, device=shifts.device)
-            + torch.repeat_interleave(shifts, lengths, output_size=size))
+def _packing_indices(parameters, lo, hi):
+    ends, shifts, _, _ = parameters
+    positions = torch.arange(lo, hi, device=shifts.device)
+    blocks = torch.searchsorted(ends, positions, right=True)
+    return positions + shifts[blocks], blocks
 
 
 @register_cache(key='cutensor_nonabelian_coefficients')
@@ -55,13 +60,74 @@ def _coefficients(values, dtype, device):
     return torch.tensor(values, dtype=dtype, device=device)
 
 
-def _pack(data, slices, coefficients=()):
-    lengths, shifts, size, contiguous = _packing_parameters(slices, data.device)
-    packed = data[:size] if contiguous else data[_slice_indices(lengths, shifts, size)]
+class _Pack(torch.autograd.Function):
+    """Recompute bounded gather maps in backward instead of saving full maps."""
+
+    @staticmethod
+    def forward(data, parameters, weights, dtype):
+        size = parameters[2]
+        result = torch.empty(size, dtype=dtype, device=data.device)
+        for lo in range(0, size, _PACK_CHUNK):
+            hi = min(lo + _PACK_CHUNK, size)
+            indices, blocks = _packing_indices(parameters, lo, hi)
+            values = data[indices].to(dtype=dtype)
+            if weights is not None:
+                values.mul_(weights[blocks])
+            result[lo:hi] = values
+            del indices, blocks, values
+        return result
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data, ctx.parameters, ctx.weights, _ = inputs
+        ctx.input_size, ctx.input_dtype = data.numel(), data.dtype
+
+    @staticmethod
+    def backward(ctx, gradient):
+        # Sum repeated slices at the promoted precision before projecting back.
+        dtype = gradient.dtype if ctx.input_dtype.is_complex else gradient.real.dtype
+        result = torch.zeros(ctx.input_size, dtype=dtype, device=gradient.device)
+        for lo in range(0, gradient.numel(), _PACK_CHUNK):
+            hi = min(lo + _PACK_CHUNK, gradient.numel())
+            indices, blocks = _packing_indices(ctx.parameters, lo, hi)
+            values = gradient[lo:hi]
+            if ctx.weights is not None:
+                values = values * ctx.weights[blocks]
+            result.index_add_(0, indices, _project_grad_dtype(values, dtype))
+            del indices, blocks, values
+        return _project_grad_dtype(result, ctx.input_dtype), None, None, None
+
+
+class _Unpack(torch.autograd.Function):
+    @staticmethod
+    def forward(data, parameters, size):
+        result = data.new_zeros(size)
+        for lo in range(0, data.numel(), _PACK_CHUNK):
+            hi = min(lo + _PACK_CHUNK, data.numel())
+            indices, blocks = _packing_indices(parameters, lo, hi)
+            result.index_copy_(0, indices, data[lo:hi])
+            del indices, blocks
+        return result
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        _, ctx.parameters, _ = inputs
+
+    @staticmethod
+    def backward(ctx, gradient):
+        return _Pack.apply(gradient, ctx.parameters, None, gradient.dtype), None, None
+
+
+def _pack(data, slices, coefficients=(), dtype=None):
+    dtype = data.dtype if dtype is None else dtype
+    parameters = _packing_parameters(slices, data.device)
+    weights = None
     if coefficients and any(value != 1 for value in coefficients):
-        weights = _coefficients(coefficients, data.real.dtype, data.device)
-        packed = packed * torch.repeat_interleave(weights, lengths, output_size=size)
-    return packed
+        real_dtype = torch.empty((), dtype=dtype).real.dtype
+        weights = _coefficients(coefficients, real_dtype, data.device)
+    if parameters[3] and weights is None:
+        return data[:parameters[2]].to(dtype=dtype)
+    return _Pack.apply(data, parameters, weights, dtype)
 
 
 @nsys_profile
@@ -74,21 +140,23 @@ def tensordot_nonabelian(Adata, Bdata, plan):
     those contributions. Packing uses reduced degeneracy blocks only.
     """
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    a, b = Adata.to(dtype=dtype), Bdata.to(dtype=dtype)
     if not plan.coefficients:
         # Keep a zero derivative for both inputs, including empty tensors.
-        return a.new_zeros(plan.size) + a[:0].sum() + b[:0].sum()
-    packed_a = _pack(a, plan.slices_a, plan.coefficients)
-    packed_b = _pack(b, plan.slices_b)
+        return (Adata.new_zeros(plan.size, dtype=dtype)
+                + Adata[:0].sum() + Bdata[:0].sum())
+    packed_a = _pack(Adata, plan.slices_a, plan.coefficients, dtype)
+    packed_b = _pack(Bdata, plan.slices_b, dtype=dtype)
     descriptors = [arg for descriptor in plan.descriptors for arg in descriptor]
     packed_c = tensordot_bs_v2(packed_a, packed_b, [1], [0],
                               *descriptors, [0, 1], list(plan.hashes))
-    lengths, shifts, size, contiguous = _packing_parameters(plan.slices_c, a.device)
+    del packed_a, packed_b  # In inference, release packing before output embedding.
+    parameters = _packing_parameters(plan.slices_c, Adata.device)
+    _, _, size, contiguous = parameters
     if contiguous and size == plan.size:
         return packed_c
     # Some symmetry-allowed channels have no nonzero gluing contribution.
     # Do not expose uninitialized output gaps from the external allocator.
-    return a.new_zeros(plan.size).index_copy(0, _slice_indices(lengths, shifts, size), packed_c)
+    return _Unpack.apply(packed_c, parameters, plan.size)
 
 
 def tensordot_bs(Adata, Bdata, *args):

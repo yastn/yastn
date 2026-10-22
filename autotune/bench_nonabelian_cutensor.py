@@ -1,7 +1,7 @@
 """Compare ordinary PyTorch and channel-aware cuTENSOR on the same reduced data.
 
 Run from the repository root, e.g.:
-    python autotune/bench_nonabelian_cutensor.py --dimensions 2 4 8 --iterations 20
+    python autotune/bench_nonabelian_cutensor.py --dimensions 12 16 --iterations 20
 
 Reports end-to-end latency (including packing) and PyTorch peak allocated memory.
 External cuTENSOR workspace allocations are not included in PyTorch's counters.
@@ -78,7 +78,7 @@ def benchmark(sym, dimension, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--dimensions', type=int, nargs='+', default=[2, 4, 8])
+    parser.add_argument('--dimensions', type=int, nargs='+', default=[12, 16])
     parser.add_argument('--sym', choices=['SU2', 'SU2xU1'], nargs='+', default=['SU2', 'SU2xU1'])
     parser.add_argument('--dtype', choices=['float32', 'float64', 'complex64', 'complex128'], default='float64')
     parser.add_argument('--device', default='cuda:0')

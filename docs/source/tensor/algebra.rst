@@ -99,11 +99,25 @@ Abelian cuTENSOR path. Non-Abelian tensors on CPU use the ordinary PyTorch kerne
 
 Packing duplicates reduced blocks that contribute more than once, so temporary
 memory depends on the number of nonzero gluing contributions. Compact device
-metadata is cached, while element-sized gather indices are temporary. Combining
+metadata is cached. Gather indices and coefficient expansion are limited to
+chunks of at most ``2**20`` elements, and backward recomputes these maps instead
+of retaining full maps in the autograd graph. Dtype promotion happens while
+packing, without a separate promoted copy of the whole input. Output embedding
+also uses chunks and writes into a single zero-initialized buffer. Combining
 many block products into one call can reduce launch overhead, but packing and
 cuTENSOR planning can outweigh that benefit for small contractions. Measure the
 workload with ``python autotune/bench_nonabelian_cutensor.py`` on the target GPU;
 the script checks values and gradients before reporting warmed-up timings.
+Its memory counter measures PyTorch allocations, excluding workspace allocated
+directly by cuTENSOR.
+
+The ordinary PyTorch contraction kernel materializes permuted blocks on demand,
+with at most 8 MiB cached per operand. Larger blocks are temporary and can be
+recomputed when reused. Backward accumulates one input block at a time and writes
+it directly into the original layout and dtype, avoiding full permuted gradient
+buffers. Only operands needed for requested gradients are saved. These bounds
+reduce temporary memory at the cost of potentially repeating permutations and
+dtype conversions when blocks do not fit in the cache.
 
 
 Transposition

@@ -32,7 +32,7 @@ mkdir -p /tmp/yastn-autotune-results
 
 python autotune/bench_svd_drivers.py --series D2 2D2 3D2 \
   --d-min 12 --d-max 12 --out /tmp/yastn-autotune-results/svd.csv
-python autotune/bench_nonabelian_cutensor.py --dimensions 4 8 12
+python autotune/bench_nonabelian_cutensor.py --dimensions 12 16
 python autotune/bench_fusion_metadata.py --source /path/to/checkout --rounds 5
 python autotune/bench_get_blocks.py --source /path/to/checkout --fuse
 ```

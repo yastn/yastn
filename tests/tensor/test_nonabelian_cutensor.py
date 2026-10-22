@@ -243,3 +243,70 @@ def test_cutensor_cpu_fallback():
     leg = yastn.Leg(config, s=1, t=(1,), D=(1,))
     a = yastn.ones(config, legs=(leg, leg.conj()))
     assert yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1)).item() == pytest.approx(2)
+
+
+@pytest.mark.parametrize('dtype', [torch.float64, torch.complex128])
+@pytest.mark.parametrize('promote', [False, True])
+def test_cutensor_chunked_pack(oracle_backend, monkeypatch, dtype, promote, request):
+    backend = oracle_backend
+    monkeypatch.setattr(backend, '_PACK_CHUNK', 3)
+    # Repeated, out-of-order and empty blocks, crossing several chunk boundaries.
+    slices = ((4, 9), (0, 0), (1, 5), (4, 9))
+    coefficients = (0.5, 1., -2., 3.)
+    target_dtype = torch.complex128 if promote else dtype
+    data = torch.randn(12, dtype=dtype, device=request.config.getoption('--device'), requires_grad=True)
+
+    def reference(x):
+        return torch.cat([x[start:stop].to(target_dtype) * c
+                          for (start, stop), c in zip(slices, coefficients)])
+
+    def operation(x):
+        return backend._pack(x, slices, coefficients, target_dtype)
+
+    saved = []
+    with torch.autograd.graph.saved_tensors_hooks(lambda x: saved.append(x) or x, lambda x: x):
+        actual = operation(data)
+    # Packing is linear: neither source values nor element-sized maps are needed.
+    assert actual.numel() == 14
+    assert saved == []
+    torch.testing.assert_close(actual, reference(data))
+    assert torch.autograd.gradcheck(operation, (data,))
+    assert torch.autograd.gradgradcheck(operation, (data,))
+    weight = torch.randn_like(actual)
+    found = torch.autograd.grad(actual, data, weight)[0]
+    expected = torch.autograd.grad(reference(data), data, weight)[0]
+    torch.testing.assert_close(found, expected)
+
+
+def test_cutensor_chunked_unpack(oracle_backend, monkeypatch, request):
+    backend = oracle_backend
+    monkeypatch.setattr(backend, '_PACK_CHUNK', 3)
+    data = torch.randn(7, dtype=torch.complex128, device=request.config.getoption('--device'), requires_grad=True)
+    parameters = backend._packing_parameters(((2, 6), (9, 12)), data.device)
+
+    def operation(x):
+        return backend._Unpack.apply(x, parameters, 14)
+
+    actual = operation(data)
+    expected = torch.cat((data.new_zeros(2), data[:4], data.new_zeros(3),
+                          data[4:], data.new_zeros(2)))
+    torch.testing.assert_close(actual, expected)
+    assert torch.autograd.gradcheck(operation, (data,))
+    assert torch.autograd.gradgradcheck(operation, (data,))
+
+
+def test_cutensor_pack_contiguous_alias(oracle_backend, request):
+    data = torch.randn(10, device=request.config.getoption('--device'), requires_grad=True)
+    packed = oracle_backend._pack(data, ((0, 3), (3, 7)))
+    assert packed.data_ptr() == data.data_ptr()
+    assert packed.numel() == 7
+    torch.testing.assert_close(torch.autograd.grad(packed.sum(), data)[0],
+                               data.new_tensor([1.] * 7 + [0.] * 3))
+
+
+def test_cutensor_pack_mixed_precision_accumulation(oracle_backend, monkeypatch, request):
+    monkeypatch.setattr(oracle_backend, '_PACK_CHUNK', 1)
+    data = torch.ones(1, dtype=torch.float32, device=request.config.getoption('--device'), requires_grad=True)
+    out = oracle_backend._pack(data, ((0, 1),) * 3, dtype=torch.float64)
+    weight = out.new_tensor([1e8, 1., -1e8])
+    torch.testing.assert_close(torch.autograd.grad(out, data, weight)[0], torch.ones_like(data))
