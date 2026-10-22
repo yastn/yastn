@@ -221,9 +221,9 @@ def _fuse_legs_hard(a, axes, order):
                      for n in range(len(group_sizes)))
         order = tuple(range(a.ndim_n))
     meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
-    from ._nonabelian import fusion_scale
-    source = fusion_scale(a.config, a._data, a.struct, struct_new, axes, meta_mrg)
-    data = a.config.backend.transpose_and_merge(source, order, meta_mrg, size)
+    from ._nonabelian import fusion_transpose_and_merge
+    data = fusion_transpose_and_merge(a.config, a._data, a.struct, struct_new,
+                                      axes, order, meta_mrg, size)
 
     mfs = ((1,),) * len(struct_new.legs)
     hfs = []
@@ -585,9 +585,9 @@ def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=Tr
     order = sum(axes, start=())
     sub_legs = struct_sub.legs if struct_sub is not None else None
     meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(config.sym, struct, axes, sub_legs, connector_first, lazy_threshold)
-    from ._nonabelian import fusion_scale
-    data = fusion_scale(config, data, struct, struct_mrg, axes, meta_mrg)
-    data = config.backend.transpose_and_merge(data, order, meta_mrg, size)
+    from ._nonabelian import fusion_transpose_and_merge
+    data = fusion_transpose_and_merge(config, data, struct, struct_mrg,
+                                      axes, order, meta_mrg, size)
     hfs = []
     for legs in legs_group:
         hfs_axs = tuple(_Fusion() for _ in legs)

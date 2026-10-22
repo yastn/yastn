@@ -444,6 +444,65 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         return data_in_b, None, None, None
 
 
+class kernel_transpose_and_merge_scaled(torch.autograd.Function):
+    """Scale directly into disjoint output views; save only block metadata/weights."""
+
+    @staticmethod
+    def forward(data_in, order, meta, size_out, weights, indices):
+        data_out = data_in.new_zeros(size_out)
+        scalars = weights.unbind()
+        for (sln, Dn, slo, Do, ssln, _), index in zip(meta, indices):
+            shape = tuple(Do[i] for i in order)
+            # Split the fused axes in the destination, rather than flattening
+            # the permuted source (which can copy a whole large block).
+            target = data_out[sln].view(Dn)[ssln].view(shape)
+            torch.mul(data_in[slo].view(Do).permute(order), scalars[index], out=target)
+        return data_out
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data_in, ctx.order, ctx.meta, _, weights, ctx.indices = inputs
+        ctx.size_in = data_in.numel()
+        ctx.save_for_backward(weights)
+
+    @staticmethod
+    def backward(ctx, gradient):
+        weights, = ctx.saved_tensors
+        result = kernel_transpose_and_merge_scaled_adjoint.apply(
+            gradient, ctx.order, ctx.meta, ctx.size_in, weights, ctx.indices)
+        return result, None, None, None, None, None
+
+
+class kernel_transpose_and_merge_scaled_adjoint(torch.autograd.Function):
+    """Adjoint of weighted merging, also used to support higher derivatives."""
+
+    @staticmethod
+    def forward(data_in, order, meta, size_out, weights, indices):
+        data_out = data_in.new_zeros(size_out)
+        scalars = weights.unbind()
+        for (sln, Dn, slo, Do, ssln, _), index in zip(meta, indices):
+            shape = tuple(Do[i] for i in order)
+            source = data_in[sln].reshape(Dn)[ssln].view(shape)
+            target = data_out[slo].view(Do).permute(order)
+            # Fusion weights are real; the adjoint uses the same weight,
+            # not its reciprocal. Uncovered source positions retain zero.
+            torch.mul(source, scalars[index], out=target)
+        return data_out
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data_in, ctx.order, ctx.meta, _, weights, ctx.indices = inputs
+        ctx.size_in = data_in.numel()
+        ctx.save_for_backward(weights)
+
+    @staticmethod
+    def backward(ctx, gradient):
+        weights, = ctx.saved_tensors
+        result = kernel_transpose_and_merge_scaled.apply(
+            gradient, ctx.order, ctx.meta, ctx.size_in, weights, ctx.indices)
+        return result, None, None, None, None, None
+
+
 def _strides1(D):
     r"""Row-major inner strides: out[d] = prod(D[d+1:]); out[-1] == 1."""
     out = [1] * len(D)

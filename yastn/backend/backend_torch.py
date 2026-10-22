@@ -81,6 +81,7 @@ from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
+from ._backend_torch_backwards import kernel_transpose_and_merge_scaled
 from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
 from ._backend_torch_backwards import kernel_unmerge_scatter
 from ._backend_torch_backwards import kernel_transpose_and_merge_hybrid, kernel_unmerge_hybrid
@@ -104,7 +105,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask', 'embed_slices',
-    'embed_transpose', 'transpose_and_merge', 'unmerge',
+    'embed_transpose', 'transpose_and_merge', 'transpose_and_merge_scaled', 'unmerge',
     'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'scale_blocks',
     'unique', 'searchsorted', 'isin', 'nonzero', 'cumsum', 'concatenate',
     'repeat', 'where', 'zeros_like', 'full_like', 'arange']
@@ -238,6 +239,24 @@ def scale_blocks(data, weights, lengths, inverse=False):
     # Explicit output_size avoids a device-to-host synchronization on CUDA.
     values, counts = _scale_parameters(weights, lengths, inverse, data.real.dtype, data.device)
     return data * torch.repeat_interleave(values, counts, output_size=data.numel())
+
+
+def transpose_and_merge_scaled(data, order, meta, size, weights, lengths):
+    """Merge with one real weight per source block, without a scaled source buffer.
+
+    Use strided block writes on CPU and CUDA. This bounds scratch independently
+    of block size, at the cost of one multiply launch per metadata record.
+    """
+    values, _ = _scale_parameters(weights, lengths, False, data.real.dtype, data.device)
+    source_blocks = {}
+    start = 0
+    for i, length in enumerate(lengths):
+        stop = start + int(length)
+        source_blocks[(start, stop)] = i
+        start = stop
+    # Merge records can reorder or omit source blocks (trimmed contraction legs).
+    indices = tuple(source_blocks[(slo.start, slo.stop)] for _, _, slo, *_ in meta)
+    return kernel_transpose_and_merge_scaled.apply(data, order, meta, size, values, indices)
 
 
 def get_dtype(t):

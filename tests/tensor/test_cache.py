@@ -109,19 +109,19 @@ def test_fusion_weights_cache(config_kwargs):
         return value
 
     # collect the (sym, struct, fused, axes, meta) of every hard fuse/unfuse step
-    calls, scale = [], _nonabelian.fusion_scale
+    calls, fusion_weights = [], _nonabelian.fusion_weights
 
-    def probe(config, data, struct, fused, axes, meta, inverse=False):
-        calls.append((config.sym, struct, fused, axes, meta))
-        return scale(config, data, struct, fused, axes, meta, inverse=inverse)
+    def probe(sym, struct, fused, axes, meta):
+        calls.append((sym, struct, fused, axes, meta))
+        return fusion_weights(sym, struct, fused, axes, meta)
 
-    _nonabelian.fusion_scale = probe
+    _nonabelian.fusion_weights = probe
     try:
         a = four_leg_tensor(yastn.make_config(sym='SU2xU1', **config_kwargs))
         b = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         b.unfuse_legs(axes=(0, 1))
     finally:
-        _nonabelian.fusion_scale = scale
+        _nonabelian.fusion_weights = fusion_weights
     assert calls
 
     keys = []

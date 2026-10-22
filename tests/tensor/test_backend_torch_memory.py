@@ -1,11 +1,127 @@
 """Contraction regressions for bounded block storage and selective gradients."""
 import pytest
+import yastn
 
 torch = pytest.importorskip('torch')
 
 from yastn.backend._backend_torch_backwards import (
     _MatrixBlocks, kernel_dot, kernel_transpose_dot_sum,
 )
+from yastn.backend import backend_torch
+
+
+@pytest.mark.parametrize('dtype', [torch.float32, torch.float64, torch.complex64, torch.complex128])
+def test_scaled_merge_gradients_and_storage(dtype, monkeypatch, request):
+    """Reordered, partial blocks scale correctly without saving expanded weights."""
+    device = request.config.getoption('--device')
+    data = torch.randn(34, dtype=dtype, device=device, requires_grad=True)
+    original = data.detach().clone()
+    order = (1, 0, 2)
+    # Both source blocks land in a strided subview of one output block.
+    # Other input blocks and output padding are intentionally unused.
+    meta = ((slice(2, 47), (5, 9), slice(20, 32), (2, 3, 2),
+             (slice(1, 4), slice(1, 5)), (3, 4)),
+            (slice(2, 47), (5, 9), slice(3, 15), (2, 3, 2),
+             (slice(1, 4), slice(5, 9)), (3, 4)))
+    weights, lengths = (1., -0.5, 1., 2. ** 0.5, 1.), (3, 12, 5, 12, 2)
+    reference = backend_torch.transpose_and_merge(
+        backend_torch.scale_blocks(data, weights, lengths), order, meta, 50)
+    # Compute the reference before forbidding repeat_interleave: its CUDA
+    # scatter backward legitimately uses that operation to rebuild indices.
+    gradient = torch.randn(100, dtype=dtype, device=device)[::2]
+    reference_grad = torch.autograd.grad(reference, data, gradient)[0]
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Weighted merge must not expand weights or scale the full source')
+
+    monkeypatch.setattr(backend_torch, 'scale_blocks', forbidden)
+    monkeypatch.setattr(torch, 'repeat_interleave', forbidden)
+    operation = lambda x: backend_torch.transpose_and_merge_scaled(
+        x, order, meta, 50, weights, lengths)
+    saved = []
+    with torch.autograd.graph.saved_tensors_hooks(lambda x: saved.append(x) or x, lambda x: x):
+        actual = operation(data)
+    assert saved and sum(x.numel() for x in saved) == len(weights)
+    torch.testing.assert_close(actual, reference)
+    torch.testing.assert_close(data, original, rtol=0, atol=0)
+    # A noncontiguous incoming gradient must also work.
+    actual_grad = torch.autograd.grad(actual, data, gradient)[0]
+    torch.testing.assert_close(actual_grad, reference_grad)
+    if dtype in (torch.float64, torch.complex128):
+        assert torch.autograd.gradcheck(operation, (data,), fast_mode=True)
+        assert torch.autograd.gradgradcheck(operation, (data,), fast_mode=True)
+
+
+@pytest.mark.parametrize('size_in,size_out', [(0, 0), (3, 5)])
+def test_scaled_merge_empty_metadata(size_in, size_out, request):
+    device = request.config.getoption('--device')
+    data = torch.randn(size_in, dtype=torch.float64, device=device, requires_grad=True)
+    weights, lengths = ((1.,), (size_in,)) if size_in else ((), ())
+    result = backend_torch.transpose_and_merge_scaled(data, (), (), size_out, weights, lengths)
+    torch.testing.assert_close(result, data.new_zeros(size_out))
+    gradient = torch.autograd.grad(result.sum(), data, create_graph=True)[0]
+    torch.testing.assert_close(gradient, data.new_zeros(size_in))
+
+
+def test_scaled_merge_no_block_copy():
+    """A permuted block is multiplied directly into output, with no block-sized scratch."""
+    data = torch.randn(12 ** 3, dtype=torch.float64, requires_grad=True)
+    meta = ((slice(0, data.numel()), (12, 144), slice(0, data.numel()),
+             (12, 12, 12), (slice(0, 12), slice(0, 144)), (12, 144)),)
+    with torch.profiler.profile(profile_memory=True) as profile:
+        result = backend_torch.transpose_and_merge_scaled(data, (1, 0, 2), meta,
+                                                         data.numel(), (0.5,), (data.numel(),))
+        gradient = torch.autograd.grad(result.sum(), data)[0]
+    events = profile.events()
+    assert not any(event.name in ('aten::clone', 'aten::repeat_interleave') for event in events)
+    multiplies = [event for event in events if event.name == 'aten::mul']
+    assert len(multiplies) == 2
+    assert all(event.cpu_memory_usage == 0 for event in multiplies)
+    torch.testing.assert_close(result.view(12, 12, 12), data.view(12, 12, 12).permute(1, 0, 2) * 0.5)
+    torch.testing.assert_close(gradient, torch.full_like(data, 0.5))
+
+
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+@pytest.mark.parametrize('kind', ['legs', 'blocks'])
+def test_fusion_uses_scaled_merge(sym, kind, monkeypatch, request):
+    """Both fusion entry points match the old scale-then-merge path and its gradient."""
+    from yastn.tensor._merging import _fuse_blocks
+
+    config = yastn.make_config(sym=sym, backend='torch',
+                               default_device=request.config.getoption('--device'))
+    charges = (0, 1, 2) if sym == 'SU2' else ((0, 0), (1, 1), (2, 2))
+    leg = yastn.Leg(config, t=charges, D=(1, 2, 1))
+    a = yastn.rand(config, legs=(leg, leg.conj(), leg, leg.conj()), dtype='complex128')
+    a.requires_grad_()
+    assert a.nblocks > 1
+
+    def operation():
+        if kind == 'legs':
+            return a.fuse_legs(((0, 2), (1, 3)), mode='hard').data
+        return _fuse_blocks(config, a.data, a.struct, ((0, 1), (2, 3)))[0]
+
+    merged = backend_torch.transpose_and_merge_scaled
+    with monkeypatch.context() as reference_patch:
+        reference_patch.setattr(backend_torch, 'transpose_and_merge_scaled', None)
+        reference = operation()
+    calls = []
+
+    def probe(*args):
+        calls.append(len(args[2]))
+        return merged(*args)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Hard fusion must not create a scaled source buffer')
+
+    monkeypatch.setattr(backend_torch, 'transpose_and_merge_scaled', probe)
+    monkeypatch.setattr(backend_torch, 'scale_blocks', forbidden)
+    actual = operation()
+    assert calls and all(count > 0 for count in calls)
+    torch.testing.assert_close(actual, reference)
+    gradient = torch.randn_like(actual)
+    actual_grad = torch.autograd.grad(actual, a.data, gradient)[0]
+    reference_grad = torch.autograd.grad(reference, a.data, gradient)[0]
+    torch.testing.assert_close(actual_grad, reference_grad)
 
 
 @pytest.mark.parametrize('kind', ['dot', 'transpose'])

@@ -263,6 +263,17 @@ def fusion_scale(config, data, struct, fused, axes, meta, inverse=False):
     return config.backend.scale_blocks(data, tuple(weights), tuple(lengths), inverse)
 
 
+def fusion_transpose_and_merge(config, data, struct, fused, axes, order, meta, size):
+    """Apply fusion weights while writing merged blocks when the backend supports it."""
+    if not getattr(config.sym, 'IS_ABELIAN', True):
+        merge_scaled = getattr(config.backend, 'transpose_and_merge_scaled', None)
+        if merge_scaled is not None:
+            weights, lengths = fusion_weights(config.sym, struct, fused, axes, meta)
+            return merge_scaled(data, order, meta, size, tuple(weights), tuple(lengths))
+        data = fusion_scale(config, data, struct, fused, axes, meta)
+    return config.backend.transpose_and_merge(data, order, meta, size)
+
+
 #: Merging metas are nested tuples of slices, integer tuples and tuples of slices. They are
 #: encoded below as fixed-width int64 fields, each container prefixed by its length and each
 #: element by a type tag, which makes the encoding injective: distinct metas can never share a
