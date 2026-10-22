@@ -963,12 +963,12 @@ def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_thre
         meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm, lazy_threshold)
         data = config.backend.unmerge(data, meta, size)
         if not getattr(config.sym, 'IS_ABELIAN', True):
-            from ._nonabelian import fusion_scale
+            from ._nonabelian import fusion_scale_inplace
             counts = dict(zip(axes_trim, nlegs))
             starts = np.cumsum((0,) + tuple(counts.get(i, 1) for i in range(len(old_struct.legs))))
             groups = tuple(tuple(range(starts[i], starts[i+1])) for i in range(len(old_struct.legs)))
             reverse_meta = tuple((m[2], m[3], m[0], (), m[4], ()) for m in meta)
-            data = fusion_scale(config, data, struct, old_struct, groups, reverse_meta, inverse=True)
+            data = fusion_scale_inplace(config, data, struct, old_struct, groups, reverse_meta)
     if return_hfs:
         return data, struct, nlegs, hfs
     return data, struct

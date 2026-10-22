@@ -106,7 +106,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask', 'embed_slices',
     'embed_transpose', 'transpose_and_merge', 'transpose_and_merge_scaled', 'unmerge',
-    'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'scale_blocks',
+    'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'scale_blocks', 'scale_blocks_inplace',
     'unique', 'searchsorted', 'isin', 'nonzero', 'cumsum', 'concatenate',
     'repeat', 'where', 'zeros_like', 'full_like', 'arange']
 
@@ -220,8 +220,16 @@ def recouple(data, order, meta, size):
         remaining = meta
     for destination, source, shape, coefficient in remaining:
         count = prod(shape)
-        block = data[source:source + count].reshape(shape).permute(order).reshape(-1)
-        result[destination:destination + count] += coefficient * block
+        # Write the permuted source directly into the destination view. The old
+        # path materialized the permuted copy and its scaled temporary, which
+        # is the last big allocation at large chi.
+        perm_shape = tuple(shape[i] for i in order)
+        target = result[destination:destination + count].view(perm_shape)
+        values = data[source:source + count].view(shape).permute(order)
+        if isinstance(coefficient, complex):
+            target.add_(values * coefficient)
+        else:
+            target.add_(values, alpha=coefficient)
     return result + data[:0].sum() if not meta else result
 
 
@@ -239,6 +247,24 @@ def scale_blocks(data, weights, lengths, inverse=False):
     # Explicit output_size avoids a device-to-host synchronization on CUDA.
     values, counts = _scale_parameters(weights, lengths, inverse, data.real.dtype, data.device)
     return data * torch.repeat_interleave(values, counts, output_size=data.numel())
+
+
+def scale_blocks_inplace(data, weights, lengths, inverse=False):
+    """Scale an owned 1D buffer block by block, without any temporary.
+
+    Only for buffers the caller will not reuse (e.g. the fresh output of
+    ``unmerge``); this removes the full-size expanded-weights buffer of
+    ``scale_blocks``.
+    """
+    if data.numel() == 0 or len(lengths) == 0:
+        return data
+    values, _ = _scale_parameters(weights, lengths, inverse, data.real.dtype, data.device)
+    start = 0
+    for value, length in zip(values.unbind(), lengths):
+        stop = start + int(length)
+        data[start:stop].mul_(value)
+        start = stop
+    return data
 
 
 def transpose_and_merge_scaled(data, order, meta, size, weights, lengths):

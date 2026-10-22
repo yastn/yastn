@@ -263,6 +263,21 @@ def fusion_scale(config, data, struct, fused, axes, meta, inverse=False):
     return config.backend.scale_blocks(data, tuple(weights), tuple(lengths), inverse)
 
 
+def fusion_scale_inplace(config, data, struct, fused, axes, meta):
+    """Inverse fusion scaling of an owned buffer, block by block in place.
+
+    Used by the unfuse path, where ``data`` is the fresh output of ``unmerge``
+    and the full-size expanded-weights buffer of ``scale_blocks`` does not fit.
+    """
+    if getattr(config.sym, 'IS_ABELIAN', True):
+        return data
+    weights, lengths = fusion_weights(config.sym, struct, fused, axes, meta)
+    scale_inplace = getattr(config.backend, 'scale_blocks_inplace', None)
+    if scale_inplace is None:
+        return config.backend.scale_blocks(data, tuple(weights), tuple(lengths), True)
+    return scale_inplace(data, tuple(weights), tuple(lengths), True)
+
+
 def fusion_transpose_and_merge(config, data, struct, fused, axes, order, meta, size):
     """Apply fusion weights while writing merged blocks when the backend supports it."""
     if not getattr(config.sym, 'IS_ABELIAN', True):
