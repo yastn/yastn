@@ -48,6 +48,12 @@ class Evolution_out(NamedTuple):
     pinv_cutoffs: dict[str, float] = ()
     loopiness: float = 0
     truncated_sectors:dict[str, tuple] = ()
+    normalization_factor: float = 1.0
+
+    @property
+    def norm_S(self):
+        """Read-only alias for the normalization factor used by older custom code."""
+        return self.normalization_factor
 
 
 def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
@@ -107,6 +113,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
             * ``truncation_errors`` dict with truncation_error-s for all tested initializations/optimizations.
             * ``iterations`` dict with number of iterations to converge iterative optimization.
             * ``pinv_cutoffs`` dict with optimal pinv_cutoffs for methods where pinv appears.
+            * ``normalization_factor`` largest retained singular value removed by the final bond normalization, as a Python float; 1.0 for bipartite truncation, which does not perform this normalization. Excludes rescaling in environment hooks and is not the norm of the full PEPS. Also accessible as ``norm_S``.
     """
     _validate_metric_options(env, fix_metric, initialization, max_iter)
     psi = env.psi
@@ -206,6 +213,7 @@ def truncate_(env, opts_svd, bond=None,
             * ``truncation_errors`` dict with truncation_error-s for all tested initializations/optimizations.
             * ``iterations`` dict with number of iterations to converge iterative optimization.
             * ``pinv_cutoffs`` dict with optimal pinv_cutoffs for methods where pinv appears.
+            * ``normalization_factor`` largest retained singular value removed by the final bond normalization, as a Python float; 1.0 for bipartite truncation, which does not perform this normalization. Excludes rescaling in environment hooks and is not the norm of the full PEPS. Also accessible as ``norm_S``.
     """
     _validate_metric_options(env, fix_metric, initialization, max_iter)
     psi = env.psi
@@ -602,7 +610,7 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
             truncated_sectors[key] = Ms[key][0].get_legs()[1].D
         if 'SVD' in initialization:
             key = 'svd'
-            Ms[key] = symmetrized_svd(M0, M1, opts, normalize=False)
+            Ms[key], _ = symmetrized_svd(M0, M1, opts, normalize=False)
             error2s[key] = calculate_truncation_error2(Ms[key][0] @ Ms[key][1], fgf, fRR, RRgRR)
             truncated_sectors[key] = Ms[key][0].get_legs()[1].D
             if initialization != 'SVD_ONLY':
@@ -678,7 +686,8 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
         info['truncated_sectors'] = truncated_sectors
         M0, M1 = Ms[key]
 
-    M0, M1 = symmetrized_svd(M0, M1, opts, normalize=True)
+    (M0, M1), info['normalization_factor'] = symmetrized_svd(
+        M0, M1, opts, normalize=True)
     return M0, M1, info
 
 
@@ -699,7 +708,7 @@ def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
     S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
     S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
     #
-    W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
+    (W0, W1), _ = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
     p0, p1 = R0 @ U0, U1.H @ R1
     #
     error2, s0max, s1max = 100, max(S0._data), max(S1._data)
@@ -769,15 +778,22 @@ def accumulated_truncation_error(infoss, statistics='mean'):
 
 
 def symmetrized_svd(R0, R1, opts_svd, normalize=False):
-    """ SVD truncation of central tensor; divide singular values symmetrically between tensors. """
+    """SVD truncation of central tensor; divide singular values symmetrically between tensors.
+
+    Return ``((M0, M1), normalization_factor)``, where the factor is the scalar
+    divided out of the retained singular values, or 1.0 if ``normalize=False``.
+    """
     Q0, R0 = R0.qr(axes=(0, 1))
     Q1, R1 = R1.qr(axes=(1, 0), Qaxis=0, Raxis=1)
     U, S, V = svd_with_truncation(R0 @ R1, sU=R0.s[1], **opts_svd)
+    normalization_factor = 1.0
     if normalize:
-        S = S / S.norm(p='inf')
+        norm_S = S.norm(p='inf')
+        S = S / norm_S
+        normalization_factor = norm_S.item()
     S = S.sqrt()
     M0, M1 = S.broadcast(U, V, axes=(1, 0))
-    return Q0 @ M0, M1 @ Q1
+    return (Q0 @ M0, M1 @ Q1), normalization_factor
 
 
 def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
@@ -817,7 +833,7 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
     S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
     #
-    W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
+    (W0, W1), _ = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
     p0, p1 = R0 @ U0, U1.H @ R1
     #
     error2 = 100

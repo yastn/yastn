@@ -22,6 +22,18 @@ over bond truncation via different ways to calculate **bond metric**. Classes wh
 
 .. autofunction:: yastn.tn.fpeps.evolution_step_
 
+Each returned record includes ``info.normalization_factor`` (also readable as
+``info.norm_S`` for older custom code). This is the largest retained singular
+value divided out during the final bond normalization, not the norm of the full
+PEPS. Bipartite truncation does not perform this normalization and reports 1.0.
+Rescaling by environment hooks is not included.
+
+The field is appended with a default of 1.0, preserving existing field positions
+and construction with the previous arguments. Code that unpacks the complete
+record into a fixed number of variables must account for the additional field;
+attribute access is recommended. The ``norm_S`` alias supports reading only;
+use ``normalization_factor`` for keyword construction and ``_replace``.
+
 Auxiliary functions, such as :meth:`yastn.tn.fpeps.accumulated_truncation_error`, assist with tracking cumulative
 truncation error across multiple evolution steps, facilitating error analysis in time evolution simulations.
 

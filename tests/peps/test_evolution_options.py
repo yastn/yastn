@@ -12,9 +12,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import pickle
+
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
+from yastn.tn.fpeps._evolution import Evolution_out, symmetrized_svd
+
+
+def test_evolution_out_compatibility():
+    """Old positional/keyword construction and the custom norm_S reader still work."""
+    old_values = (None, 0.25, 'svd', 0, None, None, None, (), (), (), 0, ())
+    positional = Evolution_out(*old_values)
+    keyword = Evolution_out(**dict(zip(Evolution_out._fields[:-1], old_values)))
+    assert positional == keyword
+    assert positional[:-1] == old_values
+    assert positional.normalization_factor == 1.0
+    info = positional._replace(normalization_factor=2.5)
+    assert info.norm_S == info.normalization_factor == 2.5
+    assert pickle.loads(pickle.dumps(info)) == info
+
+
+@pytest.mark.parametrize('normalize', [False, True])
+def test_symmetrized_svd_normalization(config_kwargs, normalize):
+    """The factor restores the truncated matrix, not its Frobenius norm."""
+    config = yastn.make_config(sym='dense', **config_kwargs)
+    leg = yastn.Leg(config, s=1, D=(3,))
+    R0 = yastn.eye(config, legs=(leg, leg.conj())).diag()
+    R1 = yastn.Tensor(config, s=(1, -1), isdiag=True)
+    R1.set_block(Ds=(3, 3), val=[5., 3., 1.])
+    R1 = R1.diag()
+    opts = {'D_total': 2}
+    (N0, N1), factor = symmetrized_svd(R0, R1, opts, normalize=normalize)
+    assert isinstance(factor, float)
+    assert factor == pytest.approx(5.0 if normalize else 1.0)
+    expected = yastn.Tensor(config, s=(1, -1), isdiag=True)
+    expected.set_block(Ds=(3, 3), val=[5., 3., 0.])
+    assert ((N0 @ N1) * factor - expected.diag()).norm().item() < 1e-12
 
 
 def test_evolution(config_kwargs):
@@ -52,6 +86,9 @@ def test_evolution(config_kwargs):
             for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
                 assert len(info.truncation_errors) == le and len(info.pinv_cutoffs) == lp
                 assert info.bond == bond
+                assert isinstance(info.normalization_factor, float)
+                assert info.normalization_factor > 0
+                assert info.norm_S == info.normalization_factor
                 assert 0. <= info.truncation_error
                 assert -1. <= info.min_eigenvalue <= 1.
                 assert 0. <= info.wrong_eigenvalues <= 1.
@@ -107,6 +144,8 @@ def test_evolution(config_kwargs):
             for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
                 assert info.bond == bond
                 assert 0. <= info.truncation_error
+                if which == 'BP':
+                    assert info.normalization_factor == 1.0
 
         bd0 = psi.get_bond_dimensions()
         assert all(v in (1, D) for v in bd0.values())

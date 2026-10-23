@@ -65,7 +65,7 @@ def test_streamed_metric(config_kwargs, which, vertical, sym, request):
     noise = ((full - full.H).norm() / (2 * g.norm())).item()
     assert metric.nonhermitian_part == pytest.approx(noise, abs=1e-12)
 
-    M0, M1 = symmetrized_svd(R0, R1, {'D_total': 2})
+    (M0, M1), _ = symmetrized_svd(R0, R1, {'D_total': 2})
     gf = g.unfuse_legs(axes=0)
     g0 = yastn.tensordot(M1.conj(), gf, axes=(1, 1)).fuse_legs(axes=((1, 0), 2))
     g0 = g0.unfuse_legs(axes=1)
@@ -103,6 +103,8 @@ def test_streamed_gate_evolution(config_kwargs, sym, initialization, path):
     assert len(full) == len(streamed) == len(path) - 1
     for a, b in zip(full, streamed):
         assert a.truncation_error == pytest.approx(b.truncation_error, abs=1e-9)
+        assert a.normalization_factor > 0
+        assert b.normalization_factor == pytest.approx(a.normalization_factor, rel=1e-7)
         assert a.truncation_errors.keys() == b.truncation_errors.keys()
         assert b.iterations and all(count > 0 for count in b.iterations.values())
         if 'EAT' in initialization:
