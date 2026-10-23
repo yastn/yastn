@@ -790,7 +790,22 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                                                  tag=tag)
 
                 prev = local_partials.get(output_pos_key)
-                local_partials[output_pos_key] = partial if prev is None else prev + partial
+                # An EMPTY data buffer is how _filter_tensor_blocks represents a
+                # zero contraction ("strip all charges from every native leg",
+                # data=_data[:0]). For a rank>0 output that also drops nblocks to
+                # 0 and addition handles it; for a RANK-0 output there are no
+                # legs to strip, so struct still advertises the scalar block
+                # (empty shape -> product 1) while the buffer holds nothing, and
+                # backend.add tries to write 1 element from 0. Honour the
+                # representation instead: a zero contraction adds nothing.
+                if prev is not None and len(prev._data) == 0:
+                    prev = None
+                if len(partial._data) == 0:
+                    local_partials.setdefault(output_pos_key, partial)
+                elif prev is None:
+                    local_partials[output_pos_key] = partial
+                else:
+                    local_partials[output_pos_key] = prev + partial
 
                 if nvtx.enabled: nvtx.range_pop()
 
