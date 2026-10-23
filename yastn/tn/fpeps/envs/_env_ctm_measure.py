@@ -14,6 +14,8 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoundaryMPS """
 
+from numbers import Integral
+
 import scipy.sparse.linalg as sla
 
 from ._env_window import insert_operator_product_, EnvWindow, _measure_2site, _measure_nsite, _sample
@@ -23,7 +25,7 @@ from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
 from ... import mps
 from ....operators._multiplets import _is_multiplet, _multiplet_pair
-from ....initialize import rand
+from ....initialize import rand, eye
 from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
 from ....tensor.oe_blocksparse import contract_with_unroll
 from ._env_ctm_oe_measure_network import (_translate_unroll, _build_ketbra_separate,
@@ -192,7 +194,7 @@ def measure_nn(self, O, P, bond=None) -> dict:
     return out[bond[0] + nz0, bond[1] + nz1] if return_one else out
 
 
-def measure_2x2(self, *operators, sites=None) -> float:
+def measure_2x2(self, *operators, sites=None, chunk_size=None) -> float:
     r"""
     Calculate expectation value of a product of local operators
     in a :math:`2 \times 2` window within the CTM environment.
@@ -205,9 +207,21 @@ def measure_2x2(self, *operators, sites=None) -> float:
 
     sites: Sequence[tuple[int, int]]
         A list of sites [s0, s1, ...] matching corresponding operators.
+
+    chunk_size: int | None
+        If positive, partition each of the left and right CTM boundary bonds
+        into chunks of at most this many multiplicities, summed across sectors.
+        Whole irreps are retained for non-Abelian symmetries. Contract each
+        pair of chunks separately and sum the numerator and denominator before
+        taking their ratio. This reduces intermediate storage at the cost of
+        repeated contractions. The default, None, uses the original contraction.
+        Autograd is supported, but its saved intermediates can limit memory savings.
     """
     if sites is None or len(operators) != len(sites):
         raise YastnError("Number of operators and sites should match.")
+    if chunk_size is not None and (isinstance(chunk_size, bool)
+                                  or not isinstance(chunk_size, Integral) or chunk_size <= 0):
+        raise YastnError("chunk_size must be a positive integer or None.")
 
     # unpack operators if operators provided as a Lattice or dict
     operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
@@ -237,6 +251,19 @@ def measure_2x2(self, *operators, sites=None) -> float:
     ten_tr = self.psi[tr]
     ten_br = self.psi[br]
     ten_bl = self.psi[bl]
+
+    if chunk_size is not None:
+        tens = {tl: ten_tl, tr: ten_tr, br: ten_br, bl: ten_bl}
+        val_no = _contract_2x2_chunked(self, tens, window, chunk_size)
+        try:
+            sign = insert_operator_product_(tens, operators, sites, tl, self.f_ordered)
+            val_op = _contract_2x2_chunked(self, tens, window, chunk_size)
+            return sign * val_op / val_no
+        finally:
+            for ten in tens.values():
+                if isinstance(ten, DoublePepsTensor):
+                    ten.del_operator_()
+                    ten.del_charge_swaps_()
 
     vec_tl = self[tl].l @ (self[tl].tl @ self[tl].t)
     vec_tr = self[tr].t @ (self[tr].tr @ self[tr].r)
@@ -282,6 +309,64 @@ def measure_2x2(self, *operators, sites=None) -> float:
             self.psi[s].del_charge_swaps_()
 
     return sign * val_op / val_no
+
+
+def _2x2_boundary_chunks(a, b, axes, chunk_size):
+    """Restrict both ends of a boundary bond to the same multiplicity subspace."""
+    leg = a.get_legs(axes[0])
+    if leg != b.get_legs(axes[1]).conj():
+        # A fused bond can have different retained subspaces at its two ends.
+        # Let tensordot align their fusion histories before dropping them;
+        # equal reduced offsets alone do not identify the same basis states.
+        identity = eye(a.config, legs=leg, isdiag=False, device=a.device)
+        b = tensordot(b, identity, axes=(axes[1], 0))
+        order = list(range(b.ndim - 1))
+        order.insert(axes[1], b.ndim - 1)
+        b = b.transpose(axes=order)
+    # The cut bonds are summed completely, so their fusion histories are not
+    # needed. Dropping both histories also supports CTM initialized with 'dl'.
+    a, b = a.drop_leg_history(axes=axes[0]), b.drop_leg_history(axes=axes[1])
+    identity = eye(a.config, legs=a.get_legs(axes[0]), device=a.device)
+    if identity.size == 0:
+        raise YastnError("Cannot partition an empty CTM boundary bond.")
+    for start in range(0, identity.size, chunk_size):
+        mask = identity * 0
+        mask._data[start:start + chunk_size] = 1
+        left, right = mask.apply_mask(a, b, axes=axes)
+        if left.size and right.size:
+            yield left, right
+
+
+def _contract_2x2_chunked(env, tens, window, chunk_size):
+    """Sum a 2x2 window without constructing the full corner or half-window tensors."""
+    tl, tr, br, bl = window
+    result = 0
+    for edge_tl, edge_bl in _2x2_boundary_chunks(env[tl].l, env[bl].l, (0, 2), chunk_size):
+        # Slice the edges before forming vectors: the vectors themselves can
+        # already have D**4 * chi**2 elements in a double-layer contraction.
+        vec = edge_tl @ (env[tl].tl @ env[tl].t)
+        cor_tl = tensordot(vec, tens[tl], axes=((2, 1), (0, 1)))
+        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+        del vec
+        vec = env[bl].b @ (env[bl].bl @ edge_bl)
+        cor_bl = tensordot(vec, tens[bl], axes=((2, 1), (1, 2)))
+        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+        del vec
+
+        for edge_tr, edge_br in _2x2_boundary_chunks(env[tr].r, env[br].r, (2, 0), chunk_size):
+            vec = env[tr].t @ (env[tr].tr @ edge_tr)
+            cor_tr = tensordot(vec, tens[tr], axes=((1, 2), (0, 3)))
+            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+            del vec
+            vec = edge_br @ (env[br].br @ env[br].b)
+            cor_br = tensordot(vec, tens[br], axes=((2, 1), (2, 3)))
+            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+            del vec
+            result = result + vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
+            del cor_tr, cor_br
+        del cor_tl, cor_bl
+    return result
+
 
 def measure_nsite_exact(self, *operators, sites=None) -> float:
     r"""

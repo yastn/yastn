@@ -205,6 +205,7 @@ def test_multiplet_turn_and_multiple_pairs(config_kwargs, monkeypatch, sym):
             guard.setattr(mps, 'compression_', _forbid_window_contraction)
             assert env.measure_nsite_exact(*pair, sites=pair_sites).item() == pytest.approx(expected, abs=4e-11)
             assert env.measure_2x2(*pair, sites=pair_sites).item() == pytest.approx(expected, abs=4e-11)
+            assert env.measure_2x2(*pair, sites=pair_sites, chunk_size=2).item() == pytest.approx(expected, abs=4e-11)
         result = env.measure_2site(*pair, pairs=[pair_sites], opts_svd={'D_total': 256, 'tol': 1e-13})
         assert result[pair_sites].item() == pytest.approx(expected, abs=4e-11)
     # A spinor pair times a same-site spinor pair is hopping times density.
@@ -269,8 +270,8 @@ def test_multiplet_turn_and_multiple_pairs(config_kwargs, monkeypatch, sym):
             for a, b in selected:
                 i, j = sites.index(a), sites.index(b)
                 expected = np.trace(rho @ sum(c[i][s].T @ c[j][s] for s in (0, 1)))
-                assert labelled[a + (0,), b] == pytest.approx(expected, abs=4e-11)
-                assert labelled[a + (1,), b] == pytest.approx(2 * expected, abs=4e-11)
+                assert labelled[a + (0,), b].item() == pytest.approx(expected, abs=4e-11)
+                assert labelled[a + (1,), b].item() == pytest.approx(2 * expected, abs=4e-11)
     for site in sites:
         assert (psi[site] - original[site]).norm() == 0
 

@@ -175,6 +175,20 @@ Note that the SI path truncates on a narrower set of ``opts_svd`` keys than the 
 set is named once, as ``SI_TRUNCATION_KEYS`` in :mod:`yastn.tn.fpeps.envs`.
 
 
+For an exact 2x2 measurement with smaller intermediates, pass ``chunk_size``::
+
+    value = env.measure_2x2(O, P, sites=((0, 0), (1, 1)), chunk_size=16)
+
+This slices the left and right CTM boundary bonds before constructing the corner
+vectors. Each chunk contains at most ``chunk_size`` multiplicities across all
+sectors; SU2 irreps are never split. All pairs of left/right chunks contribute
+to the numerator and denominator, which are summed before normalization.
+The default ``chunk_size=None`` retains the original contraction. Smaller chunks
+trade repeated contractions for memory; the benefit depends on the boundary
+dimensions. Autograd remains supported, but saved intermediates can limit the
+memory reduction when gradients are enabled.
+
+
 API
 ---
 
