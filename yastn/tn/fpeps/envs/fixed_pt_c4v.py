@@ -267,6 +267,9 @@ class FixedPoint_c4v(torch.autograd.Function):
 
         # opts.fp already inherits from opts.fwd with the fp overrides merged in.
         ctx.verbosity = opts.verbosity
+        # torch.func transforms reject torch_cutensor's ops (torch.library custom ops), so the
+        # backward linearizes the fixed-point step with torch.autograd.grad on that backend
+        ctx.force_autograd = env.config.backend.BACKEND_ID == "torch_cutensor"
 
         env_converged = ctm_env_out.copy()
         t0= time.perf_counter()
@@ -317,11 +320,21 @@ class FixedPoint_c4v(torch.autograd.Function):
         with torch.enable_grad():
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
-            # _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-            # _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
-            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(sigma, T_phase, C_phase, ctx.opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
-            dfdC_vjp= lambda x: (df_vjp(x)[0],)
-            dfdA_vjp= lambda x: (df_vjp(x)[1],)
+            if ctx.force_autograd:
+                _env_ts_g = _env_ts.detach().requires_grad_(True)
+                _psi_data_g = tuple(p.detach().requires_grad_(True) for p in _psi_data)
+                _out_t, = FixedPoint_c4v.fixed_point_iter(sigma, T_phase, C_phase, ctx.opts, env_dict, _env_meta, _env_slices, _psi_meta, _env_ts_g, _psi_data_g)
+                # retain_graph: the same graph serves every Neumann step
+                dfdC_vjp= lambda x: torch.autograd.grad(_out_t, (_env_ts_g,), grad_outputs=x[0], retain_graph=True)
+                def dfdA_vjp(x):
+                    res = torch.autograd.grad(_out_t, _psi_data_g, grad_outputs=x[0], retain_graph=True, allow_unused=True)
+                    return (tuple(torch.zeros_like(t) if r is None else r for r, t in zip(res, _psi_data_g)),)
+            else:
+                # _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
+                # _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
+                _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(sigma, T_phase, C_phase, ctx.opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
+                dfdC_vjp= lambda x: (df_vjp(x)[0],)
+                dfdA_vjp= lambda x: (df_vjp(x)[1],)
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_postvjp_CUDAMEM.pickle")
 
