@@ -751,6 +751,49 @@ def test_checkpoint_loop_applies_prefilter_trim(config_kwargs, monkeypatch):
     assert float((result - expected).norm()) < tol
 
 
+@pytest.mark.parametrize('sym', ['none', 'U1', 'Z2'])
+@pytest.mark.parametrize('dtype', ['float64', 'complex128'])
+def test_filter_tensor_blocks_zero_scalar(config_kwargs, sym, dtype):
+    """Filtering out a scalar leaves a consistent zero that adds normally."""
+    cfg = yastn.make_config(sym=sym, **config_kwargs)
+    value = 2 + 3j if dtype == 'complex128' else 2
+    scalar = yastn.ones(config=cfg, s=(), dtype=dtype) * value
+
+    zero = _filter_tensor_blocks(scalar, frozenset())
+
+    assert zero.is_consistent()
+    assert zero.struct == scalar.struct
+    assert zero.get_shape() == ()
+    assert _nblocks(zero) == 1
+    assert _data_size(zero) == zero.config.backend.get_size(zero._data) == 1
+    assert zero.get_dtype() == scalar.get_dtype()
+    assert zero.device == scalar.device
+    assert zero.item() == 0
+    assert scalar.item() == value
+    for result in (zero + scalar, scalar + zero):
+        assert result.is_consistent()
+        assert result.item() == value
+    assert (zero + zero).is_consistent()
+    assert (zero + zero).item() == 0
+
+
+@torch_test
+@pytest.mark.parametrize('sym', ['none', 'U1', 'Z2'])
+@pytest.mark.parametrize('dtype', ['float64', 'complex128'])
+def test_filter_tensor_blocks_zero_scalar_gradient(config_kwargs, sym, dtype):
+    """A filtered scalar stays attached to autograd with a zero derivative."""
+    cfg = yastn.make_config(sym=sym, **config_kwargs)
+    scalar = yastn.ones(config=cfg, s=(), dtype=dtype)
+    scalar.requires_grad_(True)
+
+    zero = _filter_tensor_blocks(scalar, frozenset())
+    assert zero.is_consistent()
+    assert zero.requires_grad
+    zero._data.real.sum().backward()
+    assert scalar.grad() is not None
+    assert scalar.grad().norm().item() == 0
+
+
 def test_filter_tensor_blocks_compacts_data_for_swap(config_kwargs):
     """Trimmed tensors must remain structurally consistent under swap_gate."""
     cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
