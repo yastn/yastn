@@ -61,6 +61,24 @@ environment tensors:
 * ``opts_svd`` fixes the environment bond dimension, and is passed on to
   :meth:`yastn.linalg.svd_with_truncation`.
 
+For ordinary square-lattice moves, the standard 2x2 projector path constructs
+and consumes one pair of enlarged corners at a time. It still contracts each
+corner once. Dummy-bond patches and implicit SI halves retain their existing
+corner representation. Autograd may retain corner data needed by backward.
+
+The standard 2x2 projector path requests only the triangular ``R`` factors
+from QR. Without gradients this avoids constructing ``Q``; with Torch autograd,
+the reduced QR needed for a correct derivative is retained. Truncated SVD
+applies the same global selection to fused factors before phase fixing and
+unfusion, so those operations process only retained singular vectors. This
+does not change the SVD solver or remove the full vectors needed by backward.
+
+When a non-Abelian transpose cannot compose its recoupling plans within the
+global metadata budget, it streams their composition one destination block
+at a time. This avoids a full tensor allocation for each intermediate plan,
+including the six-leg canonicalization inside ``append_vec_tr``. Small-block
+index buffers are bounded; runtime depends on the number of composed terms.
+
 :meth:`yastn.tn.fpeps.EnvCTM.iterate_` (equivalently :meth:`yastn.tn.fpeps.EnvCTM.ctmrg_`) repeats
 the iteration up to ``max_sweeps`` times, stopping early when ``corner_tol`` is met by the change of
 corner singular values, or when a custom ``conv_check`` says so. With ``iterator=True`` it returns a

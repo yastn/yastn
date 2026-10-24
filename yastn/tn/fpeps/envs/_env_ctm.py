@@ -1266,12 +1266,33 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
-    cor_tl = corner2x2('tl', env[tl].l, env[tl].tl, env[tl].t, psi[tl])
-    cor_bl = corner2x2('bl', env[bl].b, env[bl].bl, env[bl].l, psi[bl])
-    cor_tr = corner2x2('tr', env[tr].t, env[tr].tr, env[tr].r, psi[tr])
-    cor_br = corner2x2('br', env[br].r, env[br].br, env[br].b, psi[br])
+    # Ordinary square-lattice halves consume disjoint corner pairs. Build and
+    # release each pair inside its expression instead of retaining four corners
+    # through QR/SVD. Each corner is still contracted exactly once. The dummy-
+    # bond and implicit-half paths need the individual corners and keep them.
+    paired_halves = not implicit_halves and (
+        (move in ('l', 'r', 'h') and psi[tl].get_shape(axes=2) != 1
+         and psi[tr].get_shape(axes=2) != 1)
+        or (move in ('t', 'b', 'v') and psi[bl].get_shape(axes=3) != 1
+            and psi[tl].get_shape(axes=3) != 1))
+    if paired_halves:
+        if move in ('l', 'r', 'h'):
+            cor_tt = (corner2x2('tl', env[tl].l, env[tl].tl, env[tl].t, psi[tl])
+                      @ corner2x2('tr', env[tr].t, env[tr].tr, env[tr].r, psi[tr]))
+            cor_bb = (corner2x2('br', env[br].r, env[br].br, env[br].b, psi[br])
+                      @ corner2x2('bl', env[bl].b, env[bl].bl, env[bl].l, psi[bl]))
+        else:
+            cor_ll = (corner2x2('bl', env[bl].b, env[bl].bl, env[bl].l, psi[bl])
+                      @ corner2x2('tl', env[tl].l, env[tl].tl, env[tl].t, psi[tl]))
+            cor_rr = (corner2x2('tr', env[tr].t, env[tr].tr, env[tr].r, psi[tr])
+                      @ corner2x2('br', env[br].r, env[br].br, env[br].b, psi[br]))
+    else:
+        cor_tl = corner2x2('tl', env[tl].l, env[tl].tl, env[tl].t, psi[tl])
+        cor_bl = corner2x2('bl', env[bl].b, env[bl].bl, env[bl].l, psi[bl])
+        cor_tr = corner2x2('tr', env[tr].t, env[tr].tr, env[tr].r, psi[tr])
+        cor_br = corner2x2('br', env[br].r, env[br].br, env[br].b, psi[br])
 
-    if any(x in move for x in 'lrh'):
+    if not paired_halves and any(x in move for x in 'lrh'):
         cor_tt = (cor_tl, cor_tr) if implicit_halves else cor_tl @ cor_tr  # b(left) b(right)
         cor_bb = (cor_br, cor_bl) if implicit_halves else cor_br @ cor_bl  # t(right) t(left)
 
@@ -1298,10 +1319,11 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             h1,h2= cor_tt, cor_bb
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_t = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
-            r_b = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+            r_t = h1 if implicit_halves else (qr(h1, axes=(0, 1), compute_q=False) if use_qr else h1)
+            r_b = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0), compute_q=False) if use_qr else h2.T)
         k_block = svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if implicit_halves else r_t).s[1])
         env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts, k_block=k_block)
+        del r_t, r_b, h1, h2
 
     if any(x in move for x in 'lh'):
         sr = psi[tr].get_shape(axes=2)
@@ -1326,12 +1348,13 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             h1,h2= cor_tt, cor_bb
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_t = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
-            r_b = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+            r_t = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0), compute_q=False) if use_qr else h1.T)
+            r_b = h2 if implicit_halves else (qr(h2, axes=(0, 1), compute_q=False) if use_qr else h2)
         k_block = svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if implicit_halves else r_t).s[1])
         env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts, k_block=k_block)
+        del r_t, r_b, h1, h2
 
-    if any(x in move for x in 'tbv'):
+    if not paired_halves and any(x in move for x in 'tbv'):
         cor_ll = (cor_bl, cor_tl) if implicit_halves else cor_bl @ cor_tl  # l(bottom) l(top)
         cor_rr = (cor_tr, cor_br) if implicit_halves else cor_tr @ cor_br  # r(top) r(bottom)
 
@@ -1358,10 +1381,11 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             h1,h2= cor_ll, cor_rr
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_l = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
-            r_r = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+            r_l = h1 if implicit_halves else (qr(h1, axes=(0, 1), compute_q=False) if use_qr else h1)
+            r_r = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0), compute_q=False) if use_qr else h2.T)
         k_block = svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if implicit_halves else r_l).s[1])
         env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts, k_block=k_block)
+        del r_l, r_r, h1, h2
 
     if any(x in move for x in 'bv'):
         st = psi[tl].get_shape(axes=3)
@@ -1386,10 +1410,11 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             h1,h2= cor_ll, cor_rr
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_l = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
-            r_r = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+            r_l = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0), compute_q=False) if use_qr else h1.T)
+            r_r = h2 if implicit_halves else (qr(h2, axes=(0, 1), compute_q=False) if use_qr else h2)
         k_block = svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if implicit_halves else r_l).s[1])
         env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts, k_block=k_block)
+        del r_l, r_r, h1, h2
 
 
 def update_1x2_projectors_(env, tl, tr, bl, br, move, opts: CTMOpts):

@@ -106,7 +106,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask', 'embed_slices',
     'embed_transpose', 'transpose_and_merge', 'transpose_and_merge_scaled', 'unmerge',
-    'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'scale_blocks', 'scale_blocks_inplace',
+    'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'recouple_sequence', 'scale_blocks', 'scale_blocks_inplace',
     'unique', 'searchsorted', 'isin', 'nonzero', 'cumsum', 'concatenate',
     'repeat', 'where', 'zeros_like', 'full_like', 'arange']
 
@@ -202,6 +202,70 @@ class _Recouple(torch.autograd.Function):
             source, destination, weights = _recoupling_indices(ctx.plan, lo, min(lo + (1 << 20), ctx.plan[3]))
             result.index_add_(0, source, gradient[destination] * weights)
         return result, None, None
+
+
+class _RecoupleSequence(torch.autograd.Function):
+    @staticmethod
+    def forward(data, plan, size, adjoint):
+        from ._recoupling import composed_recoupling_blocks
+        order = plan[0]
+        result = data.new_zeros(size)
+
+        def accumulate(record):
+            destination, source, shape, coefficient = record
+            count = prod(shape)
+            permuted = tuple(shape[i] for i in order)
+            if adjoint:
+                target = result[source:source + count].view(shape).permute(order)
+                values = data[destination:destination + count].view(permuted)
+            else:
+                target = result[destination:destination + count].view(permuted)
+                values = data[source:source + count].view(shape).permute(order)
+            target.add_(values, alpha=coefficient)
+
+        def flush(records):
+            if len(records) < 32:
+                for record in records:
+                    accumulate(record)
+                return
+            # Do not cache device maps for the streamed global product. Their
+            # lifetime and metadata size are bounded by this small batch.
+            batch = _recoupling_plan.__wrapped__(order, tuple(records), data.real.dtype, data.device)
+            for lo in range(0, batch[3], 1 << 20):
+                source, destination, weights = _recoupling_indices(batch, lo, min(lo + (1 << 20), batch[3]))
+                if adjoint:
+                    source, destination = destination, source
+                result.index_add_(0, destination, data[source] * weights)
+
+        pending = []
+        for destination, terms in composed_recoupling_blocks(plan):
+            for source, shape, coefficient in terms:
+                record = (destination, source, shape, coefficient)
+                if prod(shape) < (1 << 16):
+                    pending.append(record)
+                    if len(pending) == 4096:
+                        flush(pending)
+                        pending.clear()
+                else:
+                    # Large blocks stream through native strided accumulation.
+                    accumulate(record)
+        flush(pending)
+        return result
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data, ctx.plan, _, ctx.adjoint = inputs
+        ctx.input_size = data.numel()
+
+    @staticmethod
+    def backward(ctx, gradient):
+        result = _RecoupleSequence.apply(gradient, ctx.plan, ctx.input_size, not ctx.adjoint)
+        return result, None, None, None
+
+
+def recouple_sequence(data, steps, size):
+    from ._recoupling import recoupling_sequence_plan
+    return _RecoupleSequence.apply(data, recoupling_sequence_plan(steps), size, False)
 
 
 def recouple(data, order, meta, size):
@@ -785,22 +849,27 @@ def eigvals(data, meta, sizeS, **kwargs):
     return Sdata
 
 
-def qr(data, meta, sizes):
-    Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
+def qr(data, meta, sizes, compute_q=True):
+    # R-only QR has no derivative in Torch; retain the differentiable reduced
+    # decomposition when R contributes to a graph, without assembling Qdata.
+    mode = 'reduced' if compute_q or (torch.is_grad_enabled() and data.requires_grad) else 'r'
+    Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device) if compute_q else None
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
 
     def _loc_qr(block):
         if block.device.type == 'mps':
-            Q, R = torch.linalg.qr(block.cpu())
+            Q, R = torch.linalg.qr(block.cpu(), mode=mode)
             return Q.to(block.device), R.to(block.device)
-        return _with_cusolver_retry(torch.linalg.qr, block)
+        return _with_cusolver_retry(lambda x: torch.linalg.qr(x, mode=mode), block)
     
     for slo, Do, slQ, DQ, slR, DR in meta:
         Q, R = _loc_qr(data[slo].view(Do))
         sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
-        Qdata[slQ].view(DQ)[:] = Q * sR  # positive diag of R
+        if compute_q:
+            Qdata[slQ].view(DQ)[:] = Q * sR  # positive diag of R
         Rdata[slR].view(DR)[:] = sR.reshape([-1, 1]) * R
+        del Q, R, sR
     return Qdata, Rdata
 
 

@@ -36,6 +36,23 @@ def cuda_is_available():
     return False
 
 
+def recouple_sequence(data, steps, size):
+    from ._recoupling import recoupling_sequence_plan, composed_recoupling_blocks
+    plan = recoupling_sequence_plan(steps)
+    result = np.zeros(size, dtype=data.dtype)
+    for destination, terms in composed_recoupling_blocks(plan):
+        for source, shape, coefficient in terms:
+            count = int(np.prod(shape))
+            permuted = tuple(shape[i] for i in plan[0])
+            target = result[destination:destination + count].reshape(permuted)
+            values = data[source:source + count].reshape(shape).transpose(plan[0])
+            with np.nditer([values, target], flags=['external_loop', 'buffered', 'zerosize_ok'],
+                           op_flags=[['readonly'], ['readwrite']], buffersize=1 << 20) as it:
+                for incoming, output in it:
+                    output += coefficient * incoming
+    return result
+
+
 def recouple(data, order, meta, size):
     """Apply a cached sparse fusion-tree basis change and axis permutation."""
     result = np.zeros(size, dtype=data.dtype)
@@ -608,15 +625,21 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     return Sdata, Udata
 
 
-def qr(data, meta, sizes):
-    Qdata = np.empty((sizes[0],), dtype=data.dtype)
+def qr(data, meta, sizes, compute_q=True):
+    Qdata = np.empty((sizes[0],), dtype=data.dtype) if compute_q else None
     Rdata = np.empty((sizes[1],), dtype=data.dtype)
     for slo, Do, slQ, DQ, slR, DR in meta:
-        Q, R = scipy.linalg.qr(data[slo].reshape(Do), mode='economic')
+        if compute_q:
+            Q, R = scipy.linalg.qr(data[slo].reshape(Do), mode='economic')
+        else:
+            R = scipy.linalg.qr(data[slo].reshape(Do), mode='r')[0][:DR[0]]
         sR = np.sign(np.real(np.diag(R)))
         sR[sR == 0] = 1
-        Qdata[slQ].reshape(DQ)[:] = Q * sR  # positive diag of R
+        if compute_q:
+            Qdata[slQ].reshape(DQ)[:] = Q * sR  # positive diag of R
+            del Q
         Rdata[slR].reshape(DR)[:] = sR.reshape([-1, 1]) * R
+        del R, sR
     return Qdata, Rdata
 
 

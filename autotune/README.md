@@ -8,6 +8,8 @@ record of measured findings and their limits.
 
 | Script | Purpose |
 | --- | --- |
+| `bench_ctm_linalg.py` | Compare R-only QR, early SVD truncation and complete CTMRG sweeps against an explicit baseline tree. |
+| `bench_recouple_sequence.py` | Exercise the actual composition-budget fallback for the six-leg order in `append_vec_tr`, checking every output element. |
 | `bench_streamed_kernels.py` | Compare CPU/CUDA mask, merge, unmerge and exact 2x2 measurements across explicit source trees. |
 | `bench_svd_drivers.py` | Compare cuSOLVER SVD drivers against known singular spectra. |
 | `bench_nonabelian_cutensor.py` | Compare Torch and cuTENSOR contractions, gradients and allocated memory. |
@@ -87,3 +89,28 @@ For fusion, compare the default adaptive policy with `--fuse-tile 1048576` and
 `--fuse-tile 134217728`; JSON records include the actual adaptive tile choices.
 Use `--backend torch_cutensor --operation measure` in an environment with TAPP
 to compare complete measurements through that backend.
+
+For CTMRG memory comparisons, use the same generated input and compare every
+updated environment tensor. Each process runs one fixed D=12, chi=12 checkerboard
+input, with a cold sweep and three warm sweeps from fresh copies of that input:
+
+```bash
+python autotune/bench_ctm_linalg.py --source /path/to/baseline --variant baseline \
+  --device cuda --operation ctm --sym SU2 --reference /tmp/ctm-reference.npz --write-reference
+python autotune/bench_ctm_linalg.py --source /path/to/candidate --variant candidate \
+  --device cuda --operation ctm --sym SU2 --reference /tmp/ctm-reference.npz
+```
+
+Use `--operation qr` or `--operation svd` for four-sector matrices derived from
+D=12, checked against full QR/SVD references. Timings use `no_grad`; CUDA records
+include both absolute peak PyTorch allocation and the increment above live
+inputs/references. Absolute peaks depend on these benchmark-held copies and
+exclude memory allocated outside PyTorch. They are not total process VRAM.
+
+To reproduce the streamed recoupling comparison, run each source tree in a
+separate process using `bench_recouple_sequence.py --source /path/to/tree
+--variant baseline --device cuda --D 24` (use `--variant candidate` for the
+new tree). This synthetic SU2 case has the same `(0,2,5,1,3,4)` order and
+naturally exceeds the 65,536-entry composition budget. It is a scaled memory
+regression workload, not a replay of a specific PEPS checkpoint. The direct
+sequential reference and metadata are prepared before the timed samples.

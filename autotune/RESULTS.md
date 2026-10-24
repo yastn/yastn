@@ -4,6 +4,81 @@ Machine-specific measurements; compare variants within the same workload and
 environment. Raw logs, checkpoints, profiles and one-off experiments are kept
 outside the repository. Reproduction commands are in [README.md](README.md).
 
+## CTMRG lifetimes, QR/SVD and streamed recoupling (2026-10-24)
+
+Baseline: `3e7c8fae7d072e9f656dcaf5f4f245201547fda4`. Candidate: working-tree
+changes to QR, SVD truncation and the standard 2x2 CTMRG projector path.
+Workstation 46, RTX 3090 (24 GiB), Torch 2.10.0+cu126, one CPU thread.
+Raw records: `/home/yintai/ctm_linalg_20261024_codex/` on workstation 46.
+
+The standard projector path requests only R. With gradients disabled, the
+backend skips Q; with gradients enabled, Torch retains reduced QR for its
+derivative but skips assembling and unfusing an output Q tensor. Truncated
+SVD still performs one full decomposition and applies the same global mask,
+but masks the fused factors before phase fixing and unfusion. Full factors
+are released sequentially when autograd does not need them. The exact SVD
+backward continues to retain its required full singular vectors.
+
+The initial QR/SVD-only candidate is preserved as `linalg_source/` in the raw
+records directory. `bench_ctm_linalg.py` uses `no_grad`, with one cold sample
+and three warm samples. The table reports warm medians; memory is PyTorch
+allocated memory, excluding external workspaces and allocator reservations.
+
+| Operation | CPU baseline / QR+SVD s | GPU baseline / QR+SVD s | GPU extra peak baseline / QR+SVD MiB |
+| --- | ---: | ---: | ---: |
+| QR, four 1728 x 576 blocks | 0.23148 / 0.11431 | 0.06262 / 0.04334 | 94.385 / 53.880 |
+| SVD, same blocks, retain 12 total | 0.62292 / 0.56381 | 0.54255 / 0.54172 | 172.156 / 123.367 |
+
+The complete D=12, chi=12 checkerboard sweep compares every updated environment
+tensor with the independent baseline: 16 tensors, 84,096 elements for SU2 and
+56,448 for SU2xU1. Absolute peaks include the benchmark-held input/copies.
+
+| Full sweep | CPU baseline / QR+SVD s | GPU baseline / QR+SVD s | GPU absolute peak baseline / QR+SVD MiB |
+| --- | ---: | ---: | ---: |
+| SU2 | 17.12826 / 16.60603 | 5.06202 / 4.85479 | 240.215 / 223.991 |
+| SU2xU1 | 36.24987 / 34.83942 | 4.17086 / 3.97953 | 176.683 / 176.683 |
+
+Thus QR/SVD savings alone do not lower the peak of every CTMRG workload.
+
+Local validation: new Torch CPU tests 56 passed; new tests plus SU2 CTM/NTU
+under NumPy 67 passed, 8 skipped. The workstation 46 selected Torch CPU suite
+passed 241 tests, with 14 skipped and 4 expected failures. It covers the new
+memory paths, existing QR/SVD/svds, backend memory, non-Abelian operations,
+SU2 CTM/NTU, SI derivatives/pipeline, and dense Ising CTMRG. New cases include
+complex data, SU2/SU2xU1, a non-prefix custom mask, empty truncation, mode
+dispatch, QR gradcheck, and SVD derivative equivalence to the old pipeline.
+The same workstation GPU suite passed 241 tests, with 14 skipped, 3 expected
+failures and 1 non-strict expected-failure case passing. The actual cuTENSOR
+suite passed all 75 cases. Strict host conversion was enabled.
+
+The subsequent candidate additionally consumes ordinary square-lattice
+corners in pairs, without recomputing them, and drops projector-local halves
+and R factors after use. Dummy-bond patches and implicit SI halves keep the
+original path. New lifetime tests verify exactly four corner contractions
+per projector anchor and at most one preceding corner still live when the
+next is constructed, for all six move directions, with and without QR.
+
+It also streams multi-plan non-Abelian canonicalization when the global
+sparse product cannot be retained within its composition/work budget.
+The 65,536-entry cap remains in place. Raw steps are indexed by destination;
+only one destination block's composed coefficients are built at a time.
+Large blocks accumulate through strided views. Torch batches at most 4096
+small-block records with element-index tiles of at most 2**20 entries, and
+does not cache the device maps of that streamed product. Forward and its
+adjoint allocate one full output, without retaining full intermediate
+recoupled tensors. Structural indexing has a 16-entry host cache.
+
+Additional validation on workstation 46: Torch CPU 234 passed and GPU 234
+passed; each deselected 28 SI fixed-point/reference cases. The preceding
+QR/SVD suite collected those cases under its usual skip rules. Actual
+cuTENSOR: 49 passed. The final
+batched-adjoint tests additionally passed 8 cases each on Torch CUDA and
+cuTENSOR CUDA, including gradcheck and gradgradcheck. Locally, NumPy passed
+122 cases and Torch passed 53 additional non-Abelian/PEPS/RDM/measurement
+regressions. The streamed tests cover the `(0,2,5,1,3,4)` order inside
+`append_vec_tr`, complex data, masked channels, uncovered entries, and the
+absence of calls allocating raw intermediate recouplings.
+
 ## Streamed masks, fusion maps and exact 2x2 measurements (2026-10-24)
 
 Baseline: `afce33263c7b359823c06b3182a083c67aaf8965`. Candidate: working-tree

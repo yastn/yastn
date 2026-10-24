@@ -311,7 +311,17 @@ def _apply_fusion_tree_transpose(a, order):
     order = tuple(order)
     if order == tuple(range(a.ndim_n)):
         return a
-    for plan in _meta_fusion_tree_transpose(a.config.sym, a.struct, order):
+    plans = _meta_fusion_tree_transpose(a.config.sym, a.struct, order)
+    if len(plans) > 1:
+        # The global sparse product can exceed the metadata budget. Compose
+        # one destination block at a time instead of materializing every raw
+        # step's full tensor. Only the final output needs a data allocation.
+        steps = tuple((plan[1], plan[2]) for plan in plans)
+        data = a.config.backend.recouple_sequence(a._data, steps, plans[-1][3])
+        return a._replace(struct=plans[-1][0], data=data,
+                          hfs=tuple(a.hfs[i] for i in order),
+                          mfs=((1,),) * a.ndim_n, trans=None)
+    for plan in plans:
         a = _apply_recoupling(a, *plan)
     return a
 

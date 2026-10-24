@@ -152,21 +152,17 @@ def svd_with_truncation(a, axes=(0, 1),
     -------
     `U`, `S`, `V`
     """
-    verbosity = kwargs.get('verbosity', 0)
-    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
-                  fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
-    Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
+    def mask(S):
+        return truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
                             largest_gap=largest_gap,
                             eps_multiplet=eps_multiplet,
                             hermitian=hermitian,
                             mask_f=mask_f,
-                            verbosity=verbosity)
-
-    U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
-    U = U.moveaxis(source=-1, destination=Uaxis)
-    V = V.moveaxis(source=0, destination=Vaxis)
-    return U, S, V
+                            verbosity=kwargs.get('verbosity', 0))
+    return _svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
+                fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, Uaxis=Uaxis,
+                Vaxis=Vaxis, _truncation=mask, **kwargs)
 
 
 def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
@@ -239,6 +235,14 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
+    return _svd(a, axes=axes, sU=sU, nU=nU, compute_uv=compute_uv,
+                Uaxis=Uaxis, Vaxis=Vaxis, policy=policy, fix_signs=fix_signs,
+                svd_on_cpu=svd_on_cpu, thresh=thresh, **kwargs)
+
+
+def _svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
+         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
+         svd_on_cpu=False, thresh=0.1, _truncation=None, **kwargs):
     sym = a.config.sym
     POLICIES = ['fullrank', 'lowrank', 'randomized', 'block_arnoldi', 'block_propack', 'krylov']
     #
@@ -265,7 +269,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         # WIP: BUG for SVDS
         k_block = min(kwargs['k_block'], min(a.get_shape(axes=0), a.get_shape(axes=1)))
         U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=k_block, ncv=None, tol=0, which='LM', solver='arpack')
-        return U, S, Vh
+        if _truncation is not None:
+            mask = _truncation(S)
+            U = mask.apply_mask(U, axes=-1)
+            Vh = mask.apply_mask(Vh, axes=0)
+            S = mask.apply_mask(S, axes=0)
+        return U.moveaxis(-1, Uaxis), S, Vh.moveaxis(0, Vaxis)
 
     # 3. Continue with block-wise SVD
     out_ml, out_mr = _clear_axes(*axes)
@@ -338,9 +347,6 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
             Udata = a.config.backend.move_to(Udata, device=device)
             Vdata = a.config.backend.move_to(Vdata, device=device)
 
-    if compute_uv and fix_signs:
-        Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
-
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(), _Fusion())
     S = a._replace(struct=struct_S, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
@@ -349,12 +355,32 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         return S
 
     hfsUm = (hfsm[0], _Fusion())
+    hfsVm = (_Fusion(), hfsm[1])
+    if _truncation is not None:
+        mask = _truncation(S)
+        Um = a._replace(struct=struct_Um, data=Udata, mfs=Smfs, hfs=hfsUm, trans=None)
+        Vm = a._replace(struct=struct_Vm, data=Vdata, mfs=Smfs, hfs=hfsVm, trans=None)
+        del Udata, Vdata, Sdata
+        # Release full factors one at a time. Phase fixing and unfusion then
+        # allocate only for retained columns/rows. Autograd still retains the
+        # full singular vectors needed by the exact SVD derivative.
+        Um = mask.apply_mask(Um, axes=1)
+        Vm = mask.apply_mask(Vm, axes=0)
+        S = mask.apply_mask(S, axes=0)
+        Udata, struct_Um = Um._data, Um.struct
+        Vdata, struct_Vm = Vm._data, Vm.struct
+        del Um, Vm, mask
+        if fix_signs:
+            meta = _svd_signs_meta(sym, struct_Um, struct_Vm)
+
+    if fix_signs:
+        Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
+
     Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    hfsVm = (_Fusion(), hfsm[1])
     Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
@@ -363,6 +389,15 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
     return U, S, V
+
+
+def _svd_signs_meta(sym, struct_U, struct_V):
+    """Pair retained U/V blocks by their shared singular-vector charge."""
+    bu, bv = get_blocks(sym, struct_U), get_blocks(sym, struct_V)
+    rows_v = {tuple(t[0]): (slice(*sl), tuple(d))
+              for t, sl, d in zip(bv.t, bv.slc, bv.D)}
+    return tuple((None, None, slice(*sl), tuple(d), None, *rows_v[tuple(t[1])])
+                 for t, sl, d in zip(bu.t, bu.slc, bu.D))
 
 
 def _meta_svd(sym, struct, sU, nU, k_block):
@@ -777,7 +812,7 @@ def truncation_mask(S, which='LR',
     return Smask
 
 
-def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
+def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0, compute_q=True) -> tuple['Tensor', 'Tensor'] | 'Tensor':
     r"""
     Split a tensor using a reduced QR decomposition such that :math:`a = Q R`,
     with :math:`Q Q^\dagger = I`. The charge of `R` is zero, and the charge of ``a`` is carried by `Q`.
@@ -795,9 +830,13 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
         specify which leg of `Q` and `R` tensors are connecting to the other tensor.
         By default, it is the last leg of `Q` and the first leg of `R`.
 
+    compute_q: bool
+        If ``False``, return only ``R``. Without gradients, skip constructing
+        ``Q``. Torch retains a differentiable reduced QR when gradients are needed.
+
     Returns
     -------
-    `Q`, `R`
+    `Q`, `R` if ``compute_q=True``, otherwise `R`.
     """
     sym = a.config.sym
     _test_axes_all(a, axes)
@@ -824,13 +863,14 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
 
     meta, sizes, struct_Qm, struct_Rm = _meta_qr(a.config.sym, struct_am, sQ)
-    Qdata, Rdata = a.config.backend.qr(data, meta, sizes)
+    Qdata, Rdata = a.config.backend.qr(data, meta, sizes, compute_q=compute_q)
 
-    hfsQm = (hfsm[0], _Fusion())
-    Qdata, struct_Q = _unfuse_blocks(a.config, Qdata, struct_Qm, (0,), hfsQm)
-    Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
-    Q = a._replace(struct=struct_Q, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
+    if compute_q:
+        hfsQm = (hfsm[0], _Fusion())
+        Qdata, struct_Q = _unfuse_blocks(a.config, Qdata, struct_Qm, (0,), hfsQm)
+        Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
+        Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
+        Q = a._replace(struct=struct_Q, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
 
     hfsRm = (_Fusion(), hfsm[1])
     Rdata, struct_R = _unfuse_blocks(a.config, Rdata, struct_Rm, (1,), hfsRm)
@@ -838,8 +878,10 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     Rhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     R = a._replace(struct=struct_R, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
 
-    Q = Q.moveaxis(source=-1, destination=Qaxis)
     R = R.moveaxis(source=0, destination=Raxis)
+    if not compute_q:
+        return R
+    Q = Q.moveaxis(source=-1, destination=Qaxis)
     return Q, R
 
 

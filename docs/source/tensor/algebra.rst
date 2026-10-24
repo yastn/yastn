@@ -264,6 +264,17 @@ Spectral decompositions and truncation
 
 See examples at :ref:`examples/tensor/decomposition:decompositions of symmetric tensors`.
 
+``qr(..., compute_q=False)`` returns only ``R``. NumPy and Torch without
+gradients omit construction of ``Q``. When Torch needs a derivative, the
+backend keeps the reduced QR required by backward but does not assemble or
+unfuse a separate output ``Q`` tensor.
+
+``svd_with_truncation`` selects singular vectors while the factors are still
+fused matrices, before phase fixing and unfusion. It uses the same solver and
+global truncation rules as ``svd`` followed by ``truncation_mask``; no extra SVD
+pass is introduced. This reduces temporary output storage, but the exact SVD
+backward still retains the full singular vectors it requires.
+
 .. autofunction:: yastn.linalg.svd
 .. autofunction:: yastn.linalg.svd_with_truncation
 .. autofunction:: yastn.linalg.qr

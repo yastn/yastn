@@ -71,6 +71,8 @@ class kernel_svd(torch.autograd.Function):
             Udata[slU].reshape(DU)[:] = U
             Sdata[slS] = S
             Vhdata[slV].reshape(DV)[:] = Vh
+            # Do not retain the preceding block's factors during the next SVD.
+            del U, S, Vh
         return Udata, Sdata, Vhdata
 
     @staticmethod
