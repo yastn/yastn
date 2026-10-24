@@ -1322,8 +1322,15 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             r_t = h1 if implicit_halves else (qr(h1, axes=(0, 1), compute_q=False) if use_qr else h1)
             r_b = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0), compute_q=False) if use_qr else h2.T)
         k_block = svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if implicit_halves else r_t).s[1])
+        if not implicit_halves:
+            if paired_halves and 'h' not in move and 'l' not in move:
+                # The pre-QR halves are dead unless the paired second projector
+                # still needs them; release them before the SVD.
+                del h1, h2, cor_tt, cor_bb
+            else:
+                del h1, h2
         env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts, k_block=k_block)
-        del r_t, r_b, h1, h2
+        del r_t, r_b
 
     if any(x in move for x in 'lh'):
         sr = psi[tr].get_shape(axes=2)
@@ -1351,8 +1358,13 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             r_t = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0), compute_q=False) if use_qr else h1.T)
             r_b = h2 if implicit_halves else (qr(h2, axes=(0, 1), compute_q=False) if use_qr else h2)
         k_block = svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if implicit_halves else r_t).s[1])
+        if not implicit_halves:
+            if paired_halves and 'h' not in move and 'r' not in move:
+                del h1, h2, cor_tt, cor_bb
+            else:
+                del h1, h2
         env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts, k_block=k_block)
-        del r_t, r_b, h1, h2
+        del r_t, r_b
 
     if not paired_halves and any(x in move for x in 'tbv'):
         cor_ll = (cor_bl, cor_tl) if implicit_halves else cor_bl @ cor_tl  # l(bottom) l(top)
@@ -1384,8 +1396,13 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             r_l = h1 if implicit_halves else (qr(h1, axes=(0, 1), compute_q=False) if use_qr else h1)
             r_r = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0), compute_q=False) if use_qr else h2.T)
         k_block = svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if implicit_halves else r_l).s[1])
+        if not implicit_halves:
+            if paired_halves and 'v' not in move and 'b' not in move:
+                del h1, h2, cor_ll, cor_rr
+            else:
+                del h1, h2
         env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts, k_block=k_block)
-        del r_l, r_r, h1, h2
+        del r_l, r_r
 
     if any(x in move for x in 'bv'):
         st = psi[tl].get_shape(axes=3)
@@ -1413,8 +1430,13 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             r_l = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0), compute_q=False) if use_qr else h1.T)
             r_r = h2 if implicit_halves else (qr(h2, axes=(0, 1), compute_q=False) if use_qr else h2)
         k_block = svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if implicit_halves else r_l).s[1])
+        if not implicit_halves:
+            if paired_halves and 'v' not in move and 't' not in move:
+                del h1, h2, cor_ll, cor_rr
+            else:
+                del h1, h2
         env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts, k_block=k_block)
-        del r_l, r_r, h1, h2
+        del r_l, r_r
 
 
 def update_1x2_projectors_(env, tl, tr, bl, br, move, opts: CTMOpts):
