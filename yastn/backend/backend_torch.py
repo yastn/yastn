@@ -82,10 +82,10 @@ from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kern
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
 from ._backend_torch_backwards import kernel_transpose_and_merge_scaled
-from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
+from ._backend_torch_backwards import kernel_transpose_and_merge_scatter
+from . import _backend_torch_backwards as _torch_backwards
 from ._backend_torch_backwards import kernel_unmerge_scatter
 from ._backend_torch_backwards import kernel_transpose_and_merge_hybrid, kernel_unmerge_hybrid
-from ._backend_torch_backwards import _build_dest_tiled, _concat_ranges
 from ._backend_torch_backwards import kernel_embed_slices
 
 
@@ -157,9 +157,9 @@ def _recoupling_plan(order, meta, dtype, device):
     input_strides = original[:, list(order)]
     integers = np.vstack((offsets, sources, destinations, output_strides.T, input_strides.T))
     integers = torch.from_numpy(np.ascontiguousarray(integers)).to(device)
+    offset = int(ends[-1]) if len(ends) else 0
     ends = torch.from_numpy(ends).to(device)
     coefficients = torch.from_numpy(coefficients).to(dtype=dtype, device=device)
-    offset = int(ends[-1].item()) if ends.numel() else 0
     return integers, ends, coefficients, offset, ndim
 
 
@@ -917,72 +917,118 @@ def gather_slices(Adata, slices):
 #####################################################
 
 
+_MASK_TILE = 1 << 20
+
+
 @torch.no_grad()
-def _mask_flat_index(mask, meta, axis, ndim, device, size_large, small_is_out):
-    r"""
-    Build a single flat index mapping each element of the compressed (``small``)
-    tensor to its source position in the full (``large``) tensor, so that the
-    whole block-sparse mask becomes one gather. The mask selects a subset along
-    ``axis``; ``small`` and ``large`` blocks differ only in that dimension
-    (``Mn = len(mask)`` vs ``Ma``). For a small-block C-order coordinate
-    ``(l, j, r)`` the source large flat index is ``l_start + (l*Ma + m[j])*R + r``.
+def _mask_parameters(mask, meta, axis, device, small_is_out):
+    """Store block and selected-axis metadata, never an element-sized map."""
+    if small_is_out:
+        small, large, starts = meta['Dn'], meta['Da'], meta['sla'][:, 0]
+        small_slices, large_slices = meta['sln'], meta['sla']
+    else:
+        small, large, starts = meta['Da'], meta['Dn'], meta['sln'][:, 0]
+        small_slices, large_slices = meta['sla'], meta['sln']
+    counts = small.prod(axis=1)
+    ends = counts.cumsum()
+    offsets = ends - counts
+    size = int(ends[-1]) if len(ends) else 0
+    if device.type == 'cpu' and counts.max(initial=0) <= _MASK_TILE:
+        # Direct axis operations avoid per-element integer arithmetic on CPU.
+        # Each block is bounded by the same tile limit as the vectorized path.
+        records = tuple((slice(*ss), slice(*ls), tuple(ds), tuple(dl),
+                         torch.as_tensor(mask[tuple(t)], dtype=torch.int64, device=device))
+                        for ss, ls, ds, dl, t in zip(small_slices, large_slices, small, large, meta['tm']))
+        return None, None, None, size, records, axis
+    limit = max(size, int((starts + large.prod(axis=1)).max(initial=0)))
+    index_dtype = torch.int32 if limit < 2 ** 31 else torch.int64
+    # Share the axis indices of blocks with the same charge.
+    selected, mask_offsets, offset = [], {}, 0
+    for charge in dict.fromkeys(tuple(t) for t in meta['tm']):
+        values = torch.as_tensor(mask[charge], dtype=index_dtype, device=device)
+        mask_offsets[charge] = offset
+        offset += values.numel()
+        selected.append(values)
+    mask_data = torch.cat(selected) if selected else torch.empty(0, dtype=torch.int64, device=device)
+    integers = np.asarray((offsets, starts, small[:, axis], large[:, axis],
+                           small[:, axis + 1:].prod(axis=1),
+                           [mask_offsets[tuple(t)] for t in meta['tm']]), dtype=np.int64)
+    return (torch.as_tensor(integers, dtype=index_dtype, device=device),
+            torch.as_tensor(ends, dtype=index_dtype, device=device), mask_data, size, None, axis)
 
-    Reused by both ``apply_mask`` (small=out, large=in) and ``embed_mask``
-    (small=in, large=out). Scratch runs in ``int32`` when the large tensor fits,
-    with the final index cast to ``int64`` as ``index_select``/``index_add`` need.
-    """
-    nb = len(meta)
-    if nb == 0:
-        return torch.empty(0, dtype=torch.long, device=device)
-    if small_is_out:                 # apply_mask: small=out, large=in
-        D_s, D_l, l_start = meta['Dn'], meta['Da'], meta['sla'][:, 0]
-    else:                            # embed_mask: small=in, large=out
-        D_s, D_l, l_start = meta['Da'], meta['Dn'], meta['sln'][:, 0]
-    # per-block scalars (host numpy); empty-slice prod == 1 covers axis==0 / diag
-    L  = D_s[:, :axis].prod(1)
-    Mn = D_s[:, axis]
-    Ma = D_l[:, axis]
-    R  = D_s[:, axis + 1:].prod(1)
-    Ln = (L * Mn * R).astype(np.int64)                 # small-block sizes
-    soff = np.zeros(nb, np.int64); np.cumsum(Ln[:-1], out=soff[1:])
-    moff = np.zeros(nb, np.int64); np.cumsum(Mn[:-1], out=moff[1:])   # mask concat offsets
 
-    # concatenated mask indices (dedup H2D copies over distinct axis-charges)
-    uniq = {t: torch.as_tensor(v, dtype=torch.long, device=device) for t, v in mask.items()}
-    mask_cat = torch.cat([uniq[tuple(t)] for t in meta['tm']])
+def _mask_indices(parameters, lo, hi):
+    integers, ends, mask, _, _, _ = parameters
+    positions = torch.arange(lo, hi, dtype=integers.dtype, device=integers.device)
+    blocks = torch.searchsorted(ends, positions, right=True, out_int32=integers.dtype == torch.int32)
+    local = positions - integers[0, blocks]
+    right = integers[4, blocks]
+    q = torch.div(local, right, rounding_mode='floor')
+    width = integers[2, blocks]
+    left = torch.div(q, width, rounding_mode='floor')
+    selected = mask[integers[5, blocks] + q.remainder(width)]
+    indices = integers[1, blocks] + (left * integers[3, blocks] + selected) * right + local.remainder(right)
+    return indices.to(torch.int64)
 
-    S   = int(Ln.sum())
-    idt = torch.int32 if size_large < 2 ** 31 else torch.int64        # scratch dtype guard
-    Lnt = torch.as_tensor(Ln, device=device)
-    rep = lambda a, dt=idt: torch.repeat_interleave(
-        torch.as_tensor(a, dtype=dt, device=device), Lnt)            # per-position expand
 
-    r = torch.arange(S, dtype=idt, device=device)
-    r -= rep(soff)                                     # r = local offset within small block
-    Rp = rep(R)
-    q  = torch.div(r, Rp, rounding_mode='floor')       # q = local // R
-    r -= q * Rp;                       del Rp          # r = local % R
-    Mnp  = rep(Mn)
-    lidx = torch.div(q, Mnp, rounding_mode='floor')    # lidx = q // Mn
-    q -= lidx * Mnp;                   del Mnp         # q = j
-    moffp = rep(moff, torch.int64); moffp += q; del q  # int64 for gather index
-    mval = mask_cat[moffp];            del moffp
-    lidx *= rep(Ma); lidx += mval;     del mval        # lidx = lidx*Ma + m[j]
-    lidx *= rep(R);  lidx += r;        del r           # (..)*R + r
-    lidx += rep(l_start)                               # + large base
-    return lidx.to(torch.int64)                        # index_select/index_add need int64
+class _MaskGather(torch.autograd.Function):
+    @staticmethod
+    def forward(data, parameters):
+        size = parameters[3]
+        result = data.new_empty(size)
+        if parameters[4] is not None:
+            for ss, ls, ds, dl, indices in parameters[4]:
+                torch.index_select(data[ls].view(dl), parameters[5], indices, out=result[ss].view(ds))
+            return result
+        for lo in range(0, size, _MASK_TILE):
+            hi = min(lo + _MASK_TILE, size)
+            indices = _mask_indices(parameters, lo, hi)
+            result[lo:hi] = data.index_select(0, indices)
+            del indices
+        return result
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data, ctx.parameters = inputs
+        ctx.input_size = data.numel()
+
+    @staticmethod
+    def backward(ctx, gradient):
+        return _MaskScatter.apply(gradient, ctx.parameters, ctx.input_size), None
+
+
+class _MaskScatter(torch.autograd.Function):
+    @staticmethod
+    def forward(data, parameters, size):
+        result = data.new_zeros(size)
+        if parameters[4] is not None:
+            for ss, ls, ds, dl, indices in parameters[4]:
+                result[ls].view(dl).index_add_(parameters[5], indices, data[ss].view(ds))
+            return result
+        for lo in range(0, data.numel(), _MASK_TILE):
+            hi = min(lo + _MASK_TILE, data.numel())
+            indices = _mask_indices(parameters, lo, hi)
+            result.index_add_(0, indices, data[lo:hi])
+            del indices
+        return result
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        _, ctx.parameters, _ = inputs
+
+    @staticmethod
+    def backward(ctx, gradient):
+        return _MaskGather.apply(gradient, ctx.parameters), None, None
 
 
 def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    # single-gather fast path; kernel_apply_mask kept as reference fallback
-    idx = _mask_flat_index(mask, meta, axis, a_ndim, Adata.device, Adata.numel(), small_is_out=True)
-    return Adata.index_select(0, idx)
+    parameters = _mask_parameters(mask, meta, axis, Adata.device, small_is_out=True)
+    return _MaskGather.apply(Adata, parameters)
 
 
 def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    # single-scatter fast path; kernel_embed_mask kept as reference fallback
-    idx = _mask_flat_index(mask, meta, axis, a_ndim, Adata.device, Dsize, small_is_out=False)
-    return Adata.new_zeros(Dsize).index_add(0, idx, Adata)
+    parameters = _mask_parameters(mask, meta, axis, Adata.device, small_is_out=False)
+    return _MaskScatter.apply(Adata, parameters, Dsize)
 
 
 def embed_transpose(data, axes, meta_transpose, size):
@@ -996,7 +1042,7 @@ def embed_slices(data, meta, size):
 def _fuse_scatter_chunk():
     r"""
     Read env ``YASTN_FUSE_SCATTER_CHUNK`` controlling the GPU ``transpose_and_merge`` path:
-    unset -> ``None`` (scatter, single tile); ``0`` -> force the per-block loop even on GPU;
+    unset -> ``None`` (scatter, adaptive tiles); ``0`` -> force the per-block loop even on GPU;
     a positive int -> scatter with that tile size. Invalid values warn and are ignored (``None``).
     """
     env = os.environ.get('YASTN_FUSE_SCATTER_CHUNK')
@@ -1033,37 +1079,32 @@ def _fuse_scatter_thresh():
     return val
 
 
-_DEFAULT_TILE = 1 << 27   # index-build tile when YASTN_FUSE_SCATTER_CHUNK is unset 2** 
-
-
 def transpose_and_merge(data, order, meta_mrg, size):
     r"""
     Transpose-and-merge source blocks into the fused 1D buffer. On CPU uses the per-block loop
     kernel. On GPU uses a hybrid: large blocks (>= ``YASTN_FUSE_SCATTER_THRESH`` elements) go through
-    the loop, small blocks through a single compact scatter; if all blocks are small it is a pure
-    single-array scatter, if all are large a pure loop. ``YASTN_FUSE_SCATTER_CHUNK=0`` forces the
-    loop; a positive value tiles the all-small scatter. Partial coverage is handled without a sink
+    the loop, small blocks through tiled compact scatter; if all blocks are small it is a pure
+    tiled scatter, if all are large a pure loop. ``YASTN_FUSE_SCATTER_CHUNK=0`` forces the
+    loop; a positive value sets the scatter tile size. Partial coverage is handled without a sink
     on the hybrid path (compact indices cover only real blocks).
     """
     if data.is_cuda:
         chunk = _fuse_scatter_chunk()
         if chunk != 0 and len(meta_mrg) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
             thr = _fuse_scatter_thresh()
-            tile = chunk if chunk else _DEFAULT_TILE   # index-build tile (unset -> bounded default)
             meta_small = [m for m in meta_mrg if m[2].stop - m[2].start < thr]   # slo = m[2]
             if not meta_small:                 # all large -> per-block loop (no index build at all)
                 return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
-            params = pack_transpose_and_merge_params(order, tuple(meta_mrg), data.numel())
-            params['slo_start']= params['slo_start'].to(device=data.device)
-            params['packed']= params['packed'].to(device=data.device)
-            if len(meta_small) == len(meta_mrg):   # all small -> lean single-array scatter (kernel tiles by `tile`)
+            if len(meta_small) == len(meta_mrg):
+                params = _torch_backwards.device_merge_parameters(order, tuple(meta_mrg), data.numel(), data.device)
+                tile = chunk or _torch_backwards.adaptive_index_tile(
+                    data.device, data.numel(), size * data.element_size())
                 return kernel_transpose_and_merge_scatter.apply(data, params, size, tile)
             meta_large = [m for m in meta_mrg if m[2].stop - m[2].start >= thr]
-            starts = torch.tensor([m[2].start for m in meta_small], dtype=torch.int64, device=data.device)
-            stops = torch.tensor([m[2].stop for m in meta_small], dtype=torch.int64, device=data.device)
-            src_small = _concat_ranges(starts, stops, data.device)
-            dst_small = _build_dest_tiled(params, src_small, tile)   # small source positions always land in-block
-            return kernel_transpose_and_merge_hybrid.apply(data, order, meta_large, src_small, dst_small, size)
+            params = _torch_backwards.device_merge_parameters(order, tuple(meta_small), data.numel(), data.device)
+            tile = chunk or _torch_backwards.adaptive_index_tile(
+                data.device, params['compact_size'], size * data.element_size())
+            return kernel_transpose_and_merge_hybrid.apply(data, order, meta_large, params, size, tile)
     return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
 
 
@@ -1077,7 +1118,6 @@ def unmerge(data, meta, size):
         chunk = _fuse_scatter_chunk()
         if chunk != 0 and len(meta) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
             thr = _fuse_scatter_thresh()
-            tile = chunk if chunk else _DEFAULT_TILE   # index-build tile (unset -> bounded default)
             meta_small = [m for m in meta if m[0].stop - m[0].start < thr]   # sln = m[0] (dest)
             if not meta_small:                 # all large -> per-block loop (no index build at all)
                 return kernel_unmerge.apply(data, meta, size)
@@ -1086,19 +1126,20 @@ def unmerge(data, meta, size):
             # meta (sln,Dn,slo,Do,sslo) -> merge meta so _build_dest maps each DEST position to its
             # SOURCE flat index (gather_idx).
             merge_meta = [(slo, Do, sln, Dn, sslo, Dn) for (sln, Dn, slo, Do, sslo) in meta]
-            params = pack_transpose_and_merge_params(tuple(range(ndimo)), tuple(merge_meta), size)
-            params['slo_start']= params['slo_start'].to(device=data.device)
-            params['packed']= params['packed'].to(device=data.device)
-            if not params['contiguous']:   # dense dest expected; else fall back to loop
+            host_params = _torch_backwards.pack_transpose_and_merge_params(tuple(range(ndimo)), tuple(merge_meta), size)
+            if not host_params['contiguous']:   # dense dest expected; else fall back to loop
                 return kernel_unmerge.apply(data, meta, size)
-            if len(meta_small) == len(meta):   # all small -> lean gather (kernel tiles by `tile`)
+            if len(meta_small) == len(meta):
+                params = _torch_backwards.device_merge_parameters(tuple(range(ndimo)), tuple(merge_meta), size, data.device)
+                tile = chunk or _torch_backwards.adaptive_index_tile(
+                    data.device, size, size * data.element_size())
                 return kernel_unmerge_scatter.apply(data, params, size, tile)
             meta_large = [m for m in meta if m[0].stop - m[0].start >= thr]
-            starts = torch.tensor([m[0].start for m in meta_small], dtype=torch.int64, device=data.device)
-            stops = torch.tensor([m[0].stop for m in meta_small], dtype=torch.int64, device=data.device)
-            dst_small = _concat_ranges(starts, stops, data.device)   # small dest positions
-            gidx_small = _build_dest_tiled(params, dst_small, tile)   # relabeled params map dest -> source
-            return kernel_unmerge_hybrid.apply(data, meta_large, dst_small, gidx_small, size)
+            merge_small = tuple((slo, Do, sln, Dn, sslo, Dn) for sln, Dn, slo, Do, sslo in meta_small)
+            params = _torch_backwards.device_merge_parameters(tuple(range(ndimo)), merge_small, size, data.device)
+            tile = chunk or _torch_backwards.adaptive_index_tile(
+                data.device, params['compact_size'], size * data.element_size())
+            return kernel_unmerge_hybrid.apply(data, meta_large, params, size, tile)
     return kernel_unmerge.apply(data, meta, size)
 
 

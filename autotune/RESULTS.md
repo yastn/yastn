@@ -4,6 +4,136 @@ Machine-specific measurements; compare variants within the same workload and
 environment. Raw logs, checkpoints, profiles and one-off experiments are kept
 outside the repository. Reproduction commands are in [README.md](README.md).
 
+## Streamed masks, fusion maps and exact 2x2 measurements (2026-10-24)
+
+Baseline: `afce33263c7b359823c06b3182a083c67aaf8965`. Candidate: working-tree
+changes to the Torch kernels and chunked `measure_2x2`. Workstation 46,
+RTX 3090 (24 GiB), Torch 2.10.0+cu126, one CPU thread. Source trees were
+isolated and their imported paths asserted. Runs were serial on a free host.
+Raw records: `/home/yintai/optimization_20261023_codex/` on workstation 46.
+
+`bench_streamed_kernels.py` measures forward under `no_grad`, with a cold
+sample and the median of three warm samples. CUDA memory is extra peak live
+PyTorch allocation above the input/reference/cache baseline, including the
+output; it excludes external cuTENSOR workspaces and is not total VRAM.
+Every result is nonempty, nonzero and compared with a direct reference.
+
+The mask case selects 21,233,664 elements from 2048 D=12 blocks. CPU mask
+time fell from 1.41727 s to 0.09319 s (15.21x) by applying axis selections
+directly to small blocks. Larger blocks and CUDA use bounded index tiles;
+autograd retains block/axis metadata and rebuilds indices during backward.
+An initial CPU implementation using flat tiled indices took 1.63946 s and
+was replaced before final validation.
+
+The merge/unmerge case has 2048 D=12 blocks and one D=48 block, with
+3,649,536 output elements. CPU merge changed from 44.28 to 40.75 ms;
+CPU unmerge was essentially unchanged (30.18 to 30.24 ms). The unscaled
+merge writes permuted views directly, without flattening them into copies.
+Hybrid CUDA kernels now stream both source and destination maps, rather
+than retaining full maps. CPU and device metadata have separate caches.
+
+CUDA results for the same primitive cases (time in ms, memory in MiB):
+
+| Operation | Baseline ms | Candidate ms | Baseline extra peak | Candidate extra peak |
+| --- | ---: | ---: | ---: | ---: |
+| Mask | 12.05 | 13.91 | 569.13 | 210.06 |
+| Merge | 7.59 | 7.87 | 280.05 | 108.00 |
+| Unmerge | 6.89 | 7.52 | 280.05 | 108.00 |
+
+These changes trade some isolated CUDA speed for bounded memory: mask is
+15% slower with 63% less extra peak allocation; merge/unmerge are 4%/9%
+slower with 61% less. Mask tile tuning at 2**21 and 2**22 gave 13.91 and
+13.46 ms, but increased the extra peak to 258 and 354 MiB, so mask retains
+2**20 independently of the adaptive fusion policy.
+
+Exact 2x2 measurements use reduced D=12, chi=24, boundary chunk size 6,
+and a two-site number observable. Chunked results agree with the full
+unchunked contraction at rtol=1e-10, atol=1e-11. CPU warm times:
+
+| Symmetry | Baseline s | Candidate s | Speedup |
+| --- | ---: | ---: | ---: |
+| SU2 | 32.8428 | 19.1627 | 1.71x |
+| SU2xU1 | 127.4841 | 72.8639 | 1.75x |
+
+Final GPU measurements rerun both trees serially with the same environment:
+
+| Backend | Symmetry | Baseline s | Candidate s | Speedup | Extra peak MiB, baseline -> candidate |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Torch | SU2 | 2.3133 | 1.4150 | 1.63x | 215.48 -> 284.25 |
+| Torch | SU2xU1 | 2.9697 | 1.4799 | 2.01x | 190.27 -> 258.24 |
+| cuTENSOR | SU2 | 10.9258 | 10.0346 | 1.09x | 279.53 -> 335.93 |
+| cuTENSOR | SU2xU1 | 8.0255 | 6.6719 | 1.20x | 189.74 -> 258.46 |
+
+Ordinary Torch remains faster for this particular measurement workload.
+The cuTENSOR comparisons use real TAPP and the same symmetry/input seeds;
+they do not show a universal advantage for either backend. Final peak
+increases are 68-69 MiB for Torch and 56-69 MiB for cuTENSOR.
+
+A separate warm cProfile run observed 268/238 TAPP calls for SU2/SU2xU1.
+The Python `tensordot_bs_v2` wrapper accumulated 4.82/3.52 s, while `_pack`
+accumulated 0.14/0.11 s. Metadata construction also accumulated substantial
+time in blocking `torch.as_tensor` calls (3.91/1.94 s across the run).
+These are host-side profiling observations, not GPU kernel timings: queued
+CUDA work can be charged to a later upload or synchronization. They point
+to native contraction/layout/dispatch and upload synchronization as further
+investigation targets; they do not establish that increasing packing tiles
+will fix this workload. Both profiled outputs passed the reference comparison.
+
+Numerator and denominator share unchanged corners; boundary alignment and
+invariant contractions run once. Known interval masks avoid CUDA nonzero
+synchronizations. A local right-corner cache retains at most 64 MiB of
+tensor data. This is a speed/memory tradeoff: keeping both observables and
+cached corners alive can increase peak memory. Autograd saved tensors are
+not included in the cache cap, and inference savings do not imply equal
+savings in a differentiated CTMRG calculation.
+
+Fusion tiles are adaptive: target about eight tiles, rounded to powers of
+two, with an estimated scratch budget bounded by 1 GiB and one eighth of
+available memory after accounting for the output. Small operations avoid
+a CUDA memory query. `YASTN_FUSE_SCATTER_CHUNK` remains an explicit override.
+The budget is a conservative estimate, not an allocation guarantee.
+
+A larger hybrid comparison uses 32768 D=12 blocks plus one D=48 block,
+56,733,696 checked output elements. All three settings run the same final
+code; only the tile policy changes. Each output matches the direct reference.
+Actual adaptive choices were 2**23 for all cold and warm calls.
+
+| Tile policy | Small-block tiles | Merge ms | Unmerge ms | Extra peak MiB |
+| --- | ---: | ---: | ---: | ---: |
+| Fixed 2**20 | 54 | 109.10 | 113.18 | 512.85 |
+| Adaptive, 2**23 | 7 | 91.82 | 95.77 | 1072.88 |
+| Fixed 2**27 | 1 | 89.49 | 94.21 | 4753.09 |
+
+Adaptive uses 15-16% less time than fixed 2**20. It is within 3% of the
+single large tile, with 77% less extra peak allocation. This supports growing
+tiles for large workloads while retaining a memory limit; it is not evidence
+that a fixed 2**20 tile has negligible overhead at every scale.
+
+Validation: Torch CPU 543 passed, 354 skipped, 2 deselected; Torch CUDA
+877 passed, 20 skipped, 2 deselected. Strict host conversion was enabled.
+The selected suite includes mask/fusion/contraction
+paths, first/second derivatives, cache management, non-Abelian plans and
+metadata, PEPS measurements, SU2 CTM/NTU/RDM, and Hubbard quickstarts.
+The two expensive METTS cases were explicitly deselected. CPU skips include
+CUDA-only fusion variants; this is a selected regression suite, not all tests.
+The NumPy chunked-measurement suite also passed: 18 passed, 2 skipped.
+The cuTENSOR suite passed all 142 cases without skips, including actual
+TAPP CUDA contractions, CPU descriptor oracles, mixed-dtype gradients,
+packing gradcheck/gradgradcheck, chunked measurements and SU2 multiplets.
+Post-run SHA-256 comparisons matched all six changed production, regression
+test and benchmark files between the local tree and the tested remote tree.
+
+A prior real-cuTENSOR packing audit on the same host (2026-10-23, baseline
+`35dfe951`, outside this change) found that direct slice packing helped
+float64 D=16/24 forward by 1.15-1.19x, but regressed D=12 forward and
+D=12/16 forward+backward. Heterogeneous dimensions (12,16,24) improved by
+1.18-1.20x forward and 1.04-1.06x forward+backward. Its 14 contractions and
+42 output/gradient comparisons passed. Those results support investigating
+layout- and gradient-aware packing, not an unconditional direct-copy policy.
+This change leaves native TAPP packing unchanged; `torch_cutensor` inherits
+the shared Torch mask/fusion optimizations. The audit is archived at
+`/home/yintai/cutensor_pack_audit_20261023/REPORT.md` on workstation 46.
+
 ## Coefficients, recoupling and lookup (2026-10-19)
 
 Baseline: `ff987cd5`. Candidate: `74d3f1db`. The changes use CG orthogonality

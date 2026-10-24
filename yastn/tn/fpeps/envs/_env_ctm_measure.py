@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoundaryMPS """
 
+from copy import copy
 from numbers import Integral
 
 import scipy.sparse.linalg as sla
@@ -27,6 +28,7 @@ from ... import mps
 from ....operators._multiplets import _is_multiplet, _multiplet_pair
 from ....initialize import rand, eye
 from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
+from ....tensor._contractions import _apply_mask_axes
 from ....tensor.oe_blocksparse import contract_with_unroll
 from ._env_ctm_oe_measure_network import (_translate_unroll, _build_ketbra_separate,
                                           _window_bounds, _mpo_path_swaps, _cut_bonds,
@@ -214,7 +216,9 @@ def measure_2x2(self, *operators, sites=None, chunk_size=None) -> float:
         Whole irreps are retained for non-Abelian symmetries. Contract each
         pair of chunks separately and sum the numerator and denominator before
         taking their ratio. This reduces intermediate storage at the cost of
-        repeated contractions. The default, None, uses the original contraction.
+        repeated contractions. Numerator and denominator share unchanged corners;
+        a local right-corner cache retains at most 64 MiB of tensor data.
+        The default, None, uses the original contraction.
         Autograd is supported, but its saved intermediates can limit memory savings.
     """
     if sites is None or len(operators) != len(sites):
@@ -254,16 +258,18 @@ def measure_2x2(self, *operators, sites=None, chunk_size=None) -> float:
 
     if chunk_size is not None:
         tens = {tl: ten_tl, tr: ten_tr, br: ten_br, bl: ten_bl}
-        val_no = _contract_2x2_chunked(self, tens, window, chunk_size)
-        try:
-            sign = insert_operator_product_(tens, operators, sites, tl, self.f_ordered)
-            val_op = _contract_2x2_chunked(self, tens, window, chunk_size)
-            return sign * val_op / val_no
-        finally:
-            for ten in tens.values():
-                if isinstance(ten, DoublePepsTensor):
-                    ten.del_operator_()
-                    ten.del_charge_swaps_()
+        # Decorate private wrappers, sharing the underlying differentiable data.
+        # Numerator and denominator can then be streamed together without
+        # mutating the environment or invalidating cached corners.
+        decorated = {}
+        for site, ten in tens.items():
+            if isinstance(ten, DoublePepsTensor):
+                ten = copy(ten)
+                ten.swaps = dict(ten.swaps)
+            decorated[site] = ten
+        sign = insert_operator_product_(decorated, operators, sites, tl, self.f_ordered)
+        val_no, val_op = _contract_2x2_chunked(self, tens, window, chunk_size, decorated)
+        return sign * val_op / val_no
 
     vec_tl = self[tl].l @ (self[tl].tl @ self[tl].t)
     vec_tr = self[tr].t @ (self[tr].tr @ self[tr].r)
@@ -311,61 +317,104 @@ def measure_2x2(self, *operators, sites=None, chunk_size=None) -> float:
     return sign * val_op / val_no
 
 
-def _2x2_boundary_chunks(a, b, axes, chunk_size):
-    """Restrict both ends of a boundary bond to the same multiplicity subspace."""
+def _prepare_2x2_boundary(a, b, axes):
+    """Align fusion histories once, before streaming either boundary."""
     leg = a.get_legs(axes[0])
     if leg != b.get_legs(axes[1]).conj():
-        # A fused bond can have different retained subspaces at its two ends.
-        # Let tensordot align their fusion histories before dropping them;
-        # equal reduced offsets alone do not identify the same basis states.
         identity = eye(a.config, legs=leg, isdiag=False, device=a.device)
         b = tensordot(b, identity, axes=(axes[1], 0))
         order = list(range(b.ndim - 1))
         order.insert(axes[1], b.ndim - 1)
         b = b.transpose(axes=order)
-    # The cut bonds are summed completely, so their fusion histories are not
-    # needed. Dropping both histories also supports CTM initialized with 'dl'.
     a, b = a.drop_leg_history(axes=axes[0]), b.drop_leg_history(axes=axes[1])
-    identity = eye(a.config, legs=a.get_legs(axes[0]), device=a.device)
-    if identity.size == 0:
+    size = sum(a.get_legs(axes[0]).D)
+    if size == 0:
         raise YastnError("Cannot partition an empty CTM boundary bond.")
-    for start in range(0, identity.size, chunk_size):
-        mask = identity * 0
-        mask._data[start:start + chunk_size] = 1
-        left, right = mask.apply_mask(a, b, axes=axes)
+    return a, b, size
+
+
+def _2x2_boundary_chunk(a, b, axes, start, stop):
+    # The interval is known on the host: do not allocate a full diagonal mask
+    # and rediscover its nonzeros (a synchronization per sector on CUDA).
+    mask, offset = {}, 0
+    leg = a.get_legs(axes[0])
+    for charge, dimension in zip(leg.t, leg.D):
+        lo, hi = max(start - offset, 0), min(stop - offset, dimension)
+        if lo < hi:
+            mask[charge] = a.config.backend.arange(lo, hi, device=a.device)
+        offset += dimension
+    left = _apply_mask_axes(a, (a.trans[axes[0]],), (mask,))
+    right = _apply_mask_axes(b, (b.trans[axes[1]],), (mask,))
+    return left, right
+
+
+def _2x2_boundary_chunks(a, b, axes, chunk_size):
+    """Restrict both ends of a boundary bond to the same multiplicity subspace."""
+    a, b, size = _prepare_2x2_boundary(a, b, axes)
+    for start in range(0, size, chunk_size):
+        left, right = _2x2_boundary_chunk(a, b, axes, start, start + chunk_size)
         if left.size and right.size:
             yield left, right
 
 
-def _contract_2x2_chunked(env, tens, window, chunk_size):
-    """Sum a 2x2 window without constructing the full corner or half-window tensors."""
-    tl, tr, br, bl = window
-    result = 0
-    for edge_tl, edge_bl in _2x2_boundary_chunks(env[tl].l, env[bl].l, (0, 2), chunk_size):
-        # Slice the edges before forming vectors: the vectors themselves can
-        # already have D**4 * chi**2 elements in a double-layer contraction.
-        vec = edge_tl @ (env[tl].tl @ env[tl].t)
-        cor_tl = tensordot(vec, tens[tl], axes=((2, 1), (0, 1)))
-        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-        del vec
-        vec = env[bl].b @ (env[bl].bl @ edge_bl)
-        cor_bl = tensordot(vec, tens[bl], axes=((2, 1), (1, 2)))
-        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-        del vec
+_2X2_CORNER_CACHE_BYTES = 64 << 20
 
-        for edge_tr, edge_br in _2x2_boundary_chunks(env[tr].r, env[br].r, (2, 0), chunk_size):
-            vec = env[tr].t @ (env[tr].tr @ edge_tr)
-            cor_tr = tensordot(vec, tens[tr], axes=((1, 2), (0, 3)))
-            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-            del vec
-            vec = edge_br @ (env[br].br @ env[br].b)
-            cor_br = tensordot(vec, tens[br], axes=((2, 1), (2, 3)))
-            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
-            del vec
+
+def _contract_2x2_chunked(env, tens, window, chunk_size, decorated=None):
+    """Stream both observables, reusing corners within a bounded local cache."""
+    tl, tr, br, bl = window
+    left_a, left_b, left_size = _prepare_2x2_boundary(env[tl].l, env[bl].l, (0, 2))
+    right_a, right_b, right_size = _prepare_2x2_boundary(env[tr].r, env[br].r, (2, 0))
+    top_left = env[tl].tl @ env[tl].t
+    bottom_right = env[br].br @ env[br].b
+    result, result_op = 0, 0
+    cache, cache_bytes = {}, 0
+
+    def corners(vec, site, axes, fusion):
+        normal = tensordot(vec, tens[site], axes=axes).fuse_legs(axes=fusion)
+        if decorated is None:
+            return normal, normal
+        changed = (decorated[site].has_operator_or_swap()
+                   if isinstance(decorated[site], DoublePepsTensor)
+                   else decorated[site] is not tens[site])
+        operated = (tensordot(vec, decorated[site], axes=axes).fuse_legs(axes=fusion)
+                    if changed else normal)
+        return normal, operated
+
+    for left_start in range(0, left_size, chunk_size):
+        edge_tl, edge_bl = _2x2_boundary_chunk(left_a, left_b, (0, 2), left_start, left_start + chunk_size)
+        if not edge_tl.size or not edge_bl.size:
+            continue
+        cor_tl, op_tl = corners(edge_tl @ top_left, tl, ((2, 1), (0, 1)), ((0, 2), (1, 3)))
+        cor_bl, op_bl = corners(env[bl].b @ (env[bl].bl @ edge_bl), bl,
+                                ((2, 1), (1, 2)), ((0, 3), (1, 2)))
+        del edge_tl, edge_bl
+        for right_start in range(0, right_size, chunk_size):
+            bundle = cache.get(right_start)
+            if bundle is None:
+                edge_tr, edge_br = _2x2_boundary_chunk(right_a, right_b, (2, 0), right_start, right_start + chunk_size)
+                if not edge_tr.size or not edge_br.size:
+                    continue
+                cor_tr, op_tr = corners(env[tr].t @ (env[tr].tr @ edge_tr), tr,
+                                        ((1, 2), (0, 3)), ((0, 2), (1, 3)))
+                cor_br, op_br = corners(edge_br @ bottom_right, br,
+                                        ((2, 1), (2, 3)), ((0, 2), (1, 3)))
+                del edge_tr, edge_br
+                bundle = cor_tr, op_tr, cor_br, op_br
+                unique = {id(c._data): c._data for c in bundle}
+                nbytes = sum(d.numel() * d.element_size() if hasattr(d, 'numel') else d.nbytes
+                             for d in unique.values())
+                if cache_bytes + nbytes <= _2X2_CORNER_CACHE_BYTES:
+                    cache[right_start] = bundle
+                    cache_bytes += nbytes
+                del unique
+            cor_tr, op_tr, cor_br, op_br = bundle
             result = result + vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
-            del cor_tr, cor_br
-        del cor_tl, cor_bl
-    return result
+            if decorated is not None:
+                result_op = result_op + vdot(op_tl @ op_tr, tensordot(op_bl, op_br, axes=(0, 1)), conj=(0, 0))
+            del cor_tr, op_tr, cor_br, op_br, bundle
+        del cor_tl, op_tl, cor_bl, op_bl
+    return result if decorated is None else (result, result_op)
 
 
 def measure_nsite_exact(self, *operators, sites=None) -> float:

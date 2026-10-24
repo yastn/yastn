@@ -171,19 +171,21 @@ index build at all), the scatter wins for many small ones.
 
 YASTN therefore **splits each call by block size** rather than choosing globally. Blocks
 with at least ``YASTN_FUSE_SCATTER_THRESH`` elements go through the loop; smaller blocks are
-collected into one compact scatter (fusing) or gather (unfusing). Three regimes fall out:
+processed in bounded tiles with compact scatter (fusing) or gather (unfusing). Three regimes fall out:
 
 * **all blocks large** — pure per-block loop; no index map is built,
-* **all blocks small** — a single lean scatter/gather over the whole buffer,
-* **mixed** — the hybrid kernel: the large blocks loop while the small ones ride one
-  scatter built over compact indices that cover only the real blocks.
+* **all blocks small** — tiled scatter/gather over the whole buffer,
+* **mixed** — the large blocks loop while the small ones use tiled compact indices
+  that cover only the real blocks.
 
 Unfusing additionally falls back to the loop when the destination blocks do not tile the
 output buffer exactly.
 
-The index maps are keyed on structure and cached, so a repeated fusion pattern builds them
-once — see :ref:`tensor/caching:caching`, entry ``pack_transpose_and_merge_params``. That
-entry holds device-resident tensors; :func:`yastn.clear_cache` releases them.
+Only block metadata is cached: ``pack_transpose_and_merge_params`` holds the CPU
+parameters and ``device_merge_parameters`` holds separate copies for each device.
+Element-sized maps are built one tile at a time and rebuilt during backward,
+including for mixed blocks. See :ref:`tensor/caching:caching`;
+:func:`yastn.clear_cache` releases the cached metadata.
 
 .. list-table::
    :header-rows: 1
@@ -201,8 +203,12 @@ entry holds device-resident tensors; :func:`yastn.clear_cache` releases them.
        through the loop, raise it to push more through the scatter.
    * - ``YASTN_FUSE_SCATTER_CHUNK``
      - unset
-     - Tile size for building the index map. Unset means a single tile of ``2**27``
-       elements. A **positive** value tiles the build, bounding its peak scratch memory.
+     - Unset selects a tile from the workload and available GPU memory. The policy
+       targets eight tiles, starting at ``2**20`` elements for large operations,
+       with scratch limited to the smaller of 1 GiB and one eighth of the estimated
+       memory remaining after output allocation. Memory pressure can select smaller
+       tiles. A **positive** value overrides this policy for index construction and
+       data movement, including the mixed-block path and backward.
        ``0`` is the escape hatch: force the per-block loop even on GPU, which is also the
        baseline to A/B against when checking whether the scatter path is helping.
 

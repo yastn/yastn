@@ -424,7 +424,8 @@ class kernel_transpose_and_merge(torch.autograd.Function):
     def forward(data_in, order, meta, size_out):
         data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
         for sln, Dn, slo, Do, ssln, Dns in meta:
-            data_out[sln].reshape(Dn)[ssln] = data_in[slo].reshape(Do).permute(order).reshape(Dns)
+            shape = tuple(Do[i] for i in order)
+            data_out[sln].view(Dn)[ssln].view(shape).copy_(data_in[slo].view(Do).permute(order))
         return data_out
 
     @staticmethod
@@ -513,6 +514,28 @@ def _strides1(D):
     return out
 
 
+def adaptive_index_tile(device, elements, output_bytes, scratch_bytes=80):
+    """Aim for eight tiles, limited by available memory and a 1 GiB scratch budget.
+
+    Query memory only for large operations. Include unused allocator reservations
+    as reusable memory, subtract the output that has not yet been allocated, and
+    leave seven eighths of the remainder for other live tensors/workspaces.
+    This is a conservative estimate, not an allocation guarantee.
+    """
+    elements, output_bytes = int(elements), int(output_bytes)
+    base = 1 << 20
+    if elements <= base:
+        return max(1, elements)
+    free, _ = torch.cuda.mem_get_info(device)
+    reusable = torch.cuda.memory_reserved(device) - torch.cuda.memory_allocated(device)
+    available = max(0, free + reusable - output_bytes)
+    budget = max(scratch_bytes, min(1 << 30, available // 8))
+    memory_tile = 1 << ((budget // scratch_bytes).bit_length() - 1)
+    target = max(base, (elements + 7) // 8)
+    work_tile = 1 << (target - 1).bit_length()
+    return min(elements, memory_tile, work_tile)
+
+
 @register_cache
 @lru_cache(maxsize=1024)
 @nsys_profile
@@ -558,9 +581,28 @@ def pack_transpose_and_merge_params(order, meta, size_in):
     packed = torch.tensor(
         [[r[0], r[1], *r[2], *r[3], *r[4], *r[5], *r[6], *r[7], *r[8], r[9]] for r in rows],
         dtype=torch.int64, device='cpu')
+    counts = packed[:, 1] - packed[:, 0]
+    ends = counts.cumsum(0)
+    shifts = packed[:, 0] - (ends - counts)
     return {'ndimo': ndimo, 'ndimn': ndimn, 'contiguous': contiguous,
+            'compact_ends': ends, 'compact_shifts': shifts, 'compact_size': int(ends[-1]),
             'slo_start': packed[:, 0].contiguous(),   # separate 1D copy for searchsorted
             'packed': packed}
+
+
+@register_cache
+@lru_cache(maxsize=128)
+def device_merge_parameters(order, meta, size_in, device):
+    """Keep device-specific copies without mutating the shared CPU cache."""
+    parameters = pack_transpose_and_merge_params(order, meta, size_in)
+    return {key: value.to(device=device) if torch.is_tensor(value) else value
+            for key, value in parameters.items()}
+
+
+def _compact_source(parameters, lo, hi):
+    positions = torch.arange(lo, hi, device=parameters['packed'].device)
+    blocks = torch.searchsorted(parameters['compact_ends'], positions, right=True)
+    return positions + parameters['compact_shifts'][blocks]
 
 
 @nsys_profile
@@ -582,7 +624,7 @@ def _build_dest(params, g, sentinel=None):
     # column to ``[len(g)]`` with ``repeat_interleave`` one at a time (pipelined) instead of gathering
     # the whole ``[len(g), K]`` at once -- peak working set is ~6 [len(g)] vectors, not K.
     blocks, counts = torch.unique_consecutive(bc, return_counts=True)
-    col = lambda i: torch.repeat_interleave(packed[blocks, i], counts)   # column i -> [len(g)]
+    col = lambda i: torch.repeat_interleave(packed[blocks, i], counts, output_size=g.numel())   # column i -> [len(g)]
 
     o = 2
     l = g - col(0)                                           # slo_start
@@ -591,7 +633,7 @@ def _build_dest(params, g, sentinel=None):
         i_perm += ((l // col(o + 2*ndimo + d)) % col(o + d)) * col(o + ndimo + d)   # sDo1, Do, wperm
 
     o2 = o + 3 * ndimo
-    i_dest = col(packed.shape[1] - 1).clone()               # sln_start; reshape(Dns) -> +ssln -> encode Dn
+    i_dest = col(packed.shape[1] - 1)               # sln_start; reshape(Dns) -> +ssln -> encode Dn
     for e in range(ndimn):
         i_dest += ((i_perm // col(o2 + ndimn + e)) % col(o2 + e) + col(o2 + 2*ndimn + e)) * col(o2 + 3*ndimn + e)
 
@@ -633,7 +675,7 @@ def _concat_ranges(starts, stops, device):
     if total == 0:
         return torch.empty((0,), dtype=torch.int64, device=device)
     out_off = torch.cumsum(lens, 0) - lens                    # start offset of each block in the output
-    blk = torch.repeat_interleave(torch.arange(starts.numel(), device=device), lens)
+    blk = torch.repeat_interleave(torch.arange(starts.numel(), device=device), lens, output_size=total)
     return starts[blk] + (torch.arange(total, device=device) - out_off[blk])
 
 
@@ -751,72 +793,71 @@ class kernel_unmerge_scatter(torch.autograd.Function):
 
 
 class kernel_transpose_and_merge_hybrid(torch.autograd.Function):
-    r"""
-    Hybrid of :class:`kernel_transpose_and_merge` (loop) and its scatter variant. Large blocks go
-    through the per-block permute-copy loop (bandwidth-optimal, no index build); the many small
-    blocks go through a single compact scatter over precomputed ``src_small``/``dst_small`` (built
-    only over the small blocks, so no sentinel and only small-block data is touched). Large and small
-    blocks write disjoint regions of the output.
-    """
+    """Loop over large blocks and stream small-block maps, including in backward."""
     @staticmethod
-    def forward(data_in, order, meta_large, src_small, dst_small, size_out):
-        data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
-        for sln, Dn, slo, Do, ssln, Dns in meta_large:
-            data_out[sln].reshape(Dn)[ssln] = data_in[slo].reshape(Do).permute(order).reshape(Dns)
-        if src_small.numel() > 0:
-            data_out.scatter_(0, dst_small, data_in[src_small])
+    def forward(data_in, order, meta_large, parameters, size_out, tile):
+        data_out = data_in.new_zeros(size_out)
+        for sln, Dn, slo, Do, ssln, _ in meta_large:
+            shape = tuple(Do[i] for i in order)
+            data_out[sln].view(Dn)[ssln].view(shape).copy_(data_in[slo].view(Do).permute(order))
+        for lo in range(0, parameters['compact_size'], tile):
+            hi = min(lo + tile, parameters['compact_size'])
+            source = _compact_source(parameters, lo, hi)
+            destination = _build_dest(parameters, source)
+            data_out.scatter_(0, destination, data_in[source])
+            del source, destination
         return data_out
 
     @staticmethod
     def setup_context(ctx, inputs, output):
-        data_in, order, meta_large, src_small, dst_small, _ = inputs
-        ctx.order = order
-        ctx.meta_large = meta_large
-        ctx.save_for_backward(src_small, dst_small)
+        data_in, ctx.order, ctx.meta_large, ctx.parameters, _, ctx.tile = inputs
         ctx.size_in = data_in.numel()
 
     @staticmethod
     def backward(ctx, data_out_b):
-        order = ctx.order
-        inv_order = tuple(np.argsort(order))
-        src_small, dst_small = ctx.saved_tensors
-        data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
+        inv_order = tuple(np.argsort(ctx.order))
+        data_in_b = data_out_b.new_zeros(ctx.size_in)
         for sln, Dn, slo, Do, ssln, _ in ctx.meta_large:
-            inv_Do = tuple(Do[n] for n in order)
-            data_in_b[slo].view(Do)[:] = data_out_b[sln].view(Dn)[ssln].view(inv_Do).permute(inv_order)
-        if src_small.numel() > 0:
-            data_in_b[src_small] = data_out_b[dst_small]     # adjoint of the compact scatter = gather
+            shape = tuple(Do[i] for i in ctx.order)
+            data_in_b[slo].view(Do)[:] = data_out_b[sln].view(Dn)[ssln].view(shape).permute(inv_order)
+        for lo in range(0, ctx.parameters['compact_size'], ctx.tile):
+            hi = min(lo + ctx.tile, ctx.parameters['compact_size'])
+            source = _compact_source(ctx.parameters, lo, hi)
+            destination = _build_dest(ctx.parameters, source)
+            data_in_b[source] = data_out_b[destination]
+            del source, destination
         return data_in_b, None, None, None, None, None
 
 
 class kernel_unmerge_hybrid(torch.autograd.Function):
-    r"""
-    Hybrid of :class:`kernel_unmerge` (loop) and its gather variant. Large blocks go through the
-    per-block sub-block-copy loop; the many small blocks go through a single compact gather over
-    precomputed ``dst_small`` (dest positions) / ``gidx_small`` (their source flat indices).
-    """
+    """Gather small blocks in bounded tiles; retain only block metadata."""
     @staticmethod
-    def forward(data_in, meta_large, dst_small, gidx_small, size_out):
-        data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
+    def forward(data_in, meta_large, parameters, size_out, tile):
+        data_out = data_in.new_zeros(size_out)
         for sln, Dn, slo, Do, sslo in meta_large:
             data_out[sln].view(Dn)[:] = data_in[slo].view(tuple(Do))[sslo]
-        if dst_small.numel() > 0:
-            data_out[dst_small] = data_in[gidx_small]
+        for lo in range(0, parameters['compact_size'], tile):
+            hi = min(lo + tile, parameters['compact_size'])
+            destination = _compact_source(parameters, lo, hi)
+            source = _build_dest(parameters, destination)
+            data_out[destination] = data_in[source]
+            del source, destination
         return data_out
 
     @staticmethod
     def setup_context(ctx, inputs, output):
-        data_in, meta_large, dst_small, gidx_small, _ = inputs
-        ctx.meta_large = meta_large
-        ctx.save_for_backward(dst_small, gidx_small)
+        data_in, ctx.meta_large, ctx.parameters, _, ctx.tile = inputs
         ctx.size_in = data_in.numel()
 
     @staticmethod
     def backward(ctx, data_out_b):
-        dst_small, gidx_small = ctx.saved_tensors
-        data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
+        data_in_b = data_out_b.new_zeros(ctx.size_in)
         for sln, Dn, slo, Do, sslo in ctx.meta_large:
             data_in_b[slo].view(Do)[sslo] = data_out_b[sln].view(Dn)
-        if dst_small.numel() > 0:                            # adjoint of the compact gather = scatter-add
-            data_in_b.scatter_add_(0, gidx_small, data_out_b[dst_small])
+        for lo in range(0, ctx.parameters['compact_size'], ctx.tile):
+            hi = min(lo + ctx.tile, ctx.parameters['compact_size'])
+            destination = _compact_source(ctx.parameters, lo, hi)
+            source = _build_dest(ctx.parameters, destination)
+            data_in_b.scatter_add_(0, source, data_out_b[destination])
+            del source, destination
         return data_in_b, None, None, None, None

@@ -8,6 +8,7 @@ record of measured findings and their limits.
 
 | Script | Purpose |
 | --- | --- |
+| `bench_streamed_kernels.py` | Compare CPU/CUDA mask, merge, unmerge and exact 2x2 measurements across explicit source trees. |
 | `bench_svd_drivers.py` | Compare cuSOLVER SVD drivers against known singular spectra. |
 | `bench_nonabelian_cutensor.py` | Compare Torch and cuTENSOR contractions, gradients and allocated memory. |
 | `bench_su2_u1_cache.py` | Measure coefficient-cache reuse while U1 labels change. |
@@ -63,3 +64,26 @@ reuse the metadata. Timing records are JSON lines on stdout.
 Generated CSV/JSONL, checkpoints, profiles and `results*` directories are
 ignored by Git. Detailed historical reports remain available in Git history;
 transient experiment archives are kept outside the repository.
+
+The streaming comparison checks every output element against a direct reference,
+then reports cold and warm timings and CUDA peak allocation above the live input
+baseline. Run source trees serially with the same options; the source path is
+asserted inside each process. For example:
+
+```bash
+python autotune/bench_streamed_kernels.py --source /path/to/checkout \
+  --device cuda --operation mask --D 12 --blocks 2048
+python autotune/bench_streamed_kernels.py --source /path/to/checkout \
+  --device cpu --operation measure --sym SU2xU1 --D 12 --chi 24 --chunk-size 6
+python autotune/bench_streamed_kernels.py --source /path/to/checkout \
+  --device cuda --operation merge --D 12 --blocks 32768
+python autotune/bench_streamed_kernels.py --source /path/to/checkout \
+  --device cuda --operation merge --D 12 --blocks 32768 --fuse-tile 1048576
+```
+
+The primitive cases are synthetic block layouts; their speedups are not full
+PEPS-step speedups. Measurement cases compare against the unchunked contraction.
+For fusion, compare the default adaptive policy with `--fuse-tile 1048576` and
+`--fuse-tile 134217728`; JSON records include the actual adaptive tile choices.
+Use `--backend torch_cutensor --operation measure` in an environment with TAPP
+to compare complete measurements through that backend.

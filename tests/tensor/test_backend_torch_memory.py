@@ -199,3 +199,164 @@ def test_dot_mixed_precision_accumulation(request):
                   slice(i, i + 1), (1, 1)) for i in range(3))
     out = kernel_dot.apply(a, b, meta, 3)
     torch.testing.assert_close(torch.autograd.grad(out.sum(), a)[0], torch.ones_like(a))
+
+
+@pytest.mark.parametrize('tile', [127, 1 << 20])
+@pytest.mark.parametrize('axis', [0, 1, 2])
+@pytest.mark.parametrize('dtype', [torch.float64, torch.complex128])
+def test_mask_tiles_and_adjoint(axis, dtype, tile, monkeypatch, request):
+    """Noncontiguous selections span tiles and preserve first/second derivatives."""
+    import numpy as np
+
+    device = request.config.getoption('--device')
+    shape = (12, 13, 14)
+    selected_shape = list(shape)
+    selected_shape[axis] = 5
+    count, selected_count = int(np.prod(shape)), int(np.prod(selected_shape))
+    meta_dtype = [('sln', np.int64, (2,)), ('Dn', np.int64, (3,)),
+                  ('sla', np.int64, (2,)), ('Da', np.int64, (3,)), ('tm', np.int64, (1,))]
+    meta = np.array([((i * selected_count, (i + 1) * selected_count), selected_shape,
+                      (i * count, (i + 1) * count), shape, (i,)) for i in range(2)], dtype=meta_dtype)
+    indices = torch.tensor([0, 3, 5, 8, 11], device=device)
+    mask = {(0,): indices, (1,): indices.flip(0)}
+    data = torch.randn(2 * count, dtype=dtype, device=device, requires_grad=True)
+    expected = torch.cat([data[i * count:(i + 1) * count].view(shape)
+                          .index_select(axis, mask[(i,)]).reshape(-1) for i in range(2)])
+    calls = []
+    original = backend_torch._mask_indices
+
+    def probe(plan, lo, hi):
+        calls.append(hi - lo)
+        return original(plan, lo, hi)
+
+    monkeypatch.setattr(backend_torch, '_MASK_TILE', tile)
+    monkeypatch.setattr(backend_torch, '_mask_indices', probe)
+    operation = lambda x: backend_torch.apply_mask(x, mask, meta, 2 * selected_count, axis, 3)
+    actual = operation(data)
+    torch.testing.assert_close(actual, expected)
+    assert sum(p.numel() for p in actual.grad_fn.parameters if torch.is_tensor(p)) < selected_count
+    weight = torch.randn_like(actual)
+    torch.testing.assert_close(torch.autograd.grad(actual, data, weight)[0],
+                               torch.autograd.grad(expected, data, weight)[0])
+    # Embedding uses the reversed metadata and must be the adjoint of gathering.
+    reverse = meta.copy()
+    reverse['sln'], reverse['sla'] = meta['sla'], meta['sln']
+    reverse['Dn'], reverse['Da'] = meta['Da'], meta['Dn']
+    embed = lambda x: backend_torch.embed_mask(x, mask, reverse, data.numel(), axis, 3)
+    small = weight.detach().requires_grad_()
+    torch.testing.assert_close(embed(small), torch.autograd.grad(operation(data), data, weight)[0])
+    assert torch.autograd.gradcheck(operation, (data,), fast_mode=True)
+    assert torch.autograd.gradgradcheck(operation, (data,), fast_mode=True)
+    assert torch.autograd.gradgradcheck(embed, (small,), fast_mode=True)
+    if device == 'cpu' and tile >= selected_count:
+        assert not calls and actual.grad_fn.parameters[4]
+    else:
+        assert len(calls) > 2 and 0 < min(calls) <= max(calls) <= tile
+
+
+@pytest.mark.parametrize('kind', ['merge', 'unmerge'])
+@pytest.mark.parametrize('dtype', [torch.float64, torch.complex128])
+def test_hybrid_streams_maps(kind, dtype, monkeypatch, request):
+    """Mixed blocks with gaps use bounded maps and retain only block metadata."""
+    from yastn.backend import _backend_torch_backwards as kernels
+
+    device = request.config.getoption('--device')
+    shapes = ((12, 12, 12), (12, 24, 24), (12, 12, 12))
+    order = (1, 0, 2)
+    meta, source_size, output_size = [], 5, 3
+    for shape in shapes:
+        count = shape[0] * shape[1] * shape[2]
+        fused = (shape[1], shape[0] * shape[2])
+        meta.append((slice(output_size, output_size + count), fused,
+                     slice(source_size, source_size + count), shape,
+                     tuple(slice(0, d) for d in fused), fused))
+        source_size += count + 7
+        output_size += count + 3
+    calls = []
+    original = kernels._build_dest
+
+    def probe(parameters, positions, sentinel=None):
+        calls.append(positions.numel())
+        return original(parameters, positions, sentinel)
+
+    monkeypatch.setattr(kernels, '_build_dest', probe)
+    if kind == 'merge':
+        parameters = kernels.device_merge_parameters(order, (meta[0], meta[2]), source_size, device)
+        operation = lambda x: kernels.kernel_transpose_and_merge_hybrid.apply(
+            x, order, (meta[1],), parameters, output_size, 257)
+        reference = lambda x: kernels.kernel_transpose_and_merge.apply(x, order, meta, output_size)
+        size = source_size
+    else:
+        unmeta = [(slo, Dns, sln, Dn, ssln) for sln, Dn, slo, Do, ssln, Dns in meta]
+        relabeled = tuple((slo, Do, sln, Dn, sslo, Dn)
+                          for sln, Dn, slo, Do, sslo in (unmeta[0], unmeta[2]))
+        parameters = kernels.device_merge_parameters((0, 1), relabeled, source_size, device)
+        operation = lambda x: kernels.kernel_unmerge_hybrid.apply(
+            x, (unmeta[1],), parameters, source_size, 257)
+        reference = lambda x: kernels.kernel_unmerge.apply(x, unmeta, source_size)
+        size = output_size
+    data = torch.randn(size, dtype=dtype, device=device, requires_grad=True)
+    actual, expected = operation(data), reference(data)
+    torch.testing.assert_close(actual, expected)
+    assert sum(p.numel() for p in parameters.values() if torch.is_tensor(p)) < 100
+    weight = torch.randn_like(actual)
+    torch.testing.assert_close(torch.autograd.grad(actual, data, weight)[0],
+                               torch.autograd.grad(expected, data, weight)[0])
+    assert torch.autograd.gradcheck(operation, (data,), fast_mode=True)
+    assert torch.autograd.gradgradcheck(operation, (data,), fast_mode=True)
+    assert len(calls) > 2 and 0 < min(calls) <= max(calls) <= 257
+
+
+def test_unscaled_merge_no_block_copy():
+    """The unscaled path must also write a permuted D=12 block directly."""
+    from yastn.backend._backend_torch_backwards import kernel_transpose_and_merge
+
+    data = torch.randn(12 ** 3, dtype=torch.float64, requires_grad=True)
+    meta = ((slice(0, data.numel()), (12, 144), slice(0, data.numel()),
+             (12, 12, 12), (slice(0, 12), slice(0, 144)), (12, 144)),)
+    with torch.profiler.profile(profile_memory=True) as profile:
+        actual = kernel_transpose_and_merge.apply(data, (1, 0, 2), meta, data.numel())
+    copies = [e for e in profile.events() if e.name == 'aten::copy_']
+    assert copies and all(e.cpu_memory_usage == 0 for e in copies)
+    assert not any(e.name == 'aten::clone' for e in profile.events())
+    torch.testing.assert_close(actual.view(12, 12, 12), data.view(12, 12, 12).permute(1, 0, 2))
+
+
+@pytest.mark.parametrize('start', [0, 2 ** 31])
+def test_mask_index_address_width(start, monkeypatch, request):
+    """Large offsets need int64 even when the selected output is tiny."""
+    import numpy as np
+
+    device = torch.device(request.config.getoption('--device'))
+    dtype = [('sln', np.int64, (2,)), ('Dn', np.int64, (1,)),
+             ('sla', np.int64, (2,)), ('Da', np.int64, (1,)), ('tm', np.int64, (1,))]
+    meta = np.array([((0, 5), (5,), (start, start + 12), (12,), (0,))], dtype=dtype)
+    mask = {(0,): torch.tensor([0, 3, 5, 8, 11], device=device)}
+    monkeypatch.setattr(backend_torch, '_MASK_TILE', 1)
+    parameters = backend_torch._mask_parameters(mask, meta, 0, device, True)
+    assert parameters[0].dtype == (torch.int64 if start else torch.int32)
+    actual = backend_torch._mask_indices(parameters, 0, 5)
+    torch.testing.assert_close(actual, mask[(0,)] + start)
+
+
+def test_adaptive_index_tile_memory_budget(monkeypatch):
+    """Large workloads grow tiles; output and live memory constrain that growth."""
+    import numpy as np
+    from yastn.backend._backend_torch_backwards import adaptive_index_tile
+
+    monkeypatch.setattr(torch.cuda, 'mem_get_info', lambda device: (16 << 30, 24 << 30))
+    monkeypatch.setattr(torch.cuda, 'memory_reserved', lambda device: 4 << 30)
+    monkeypatch.setattr(torch.cuda, 'memory_allocated', lambda device: 2 << 30)
+    assert adaptive_index_tile('cuda', 1 << 27, np.int64(1 << 30)) == 1 << 23
+    monkeypatch.setattr(torch.cuda, 'mem_get_info', lambda device: (256 << 20, 24 << 30))
+    monkeypatch.setattr(torch.cuda, 'memory_reserved', lambda device: 2 << 30)
+    tile = adaptive_index_tile('cuda', 1 << 27, 128 << 20)
+    assert tile < 1 << 20
+    assert tile * 80 <= (128 << 20) // 8
+
+    def forbidden(*args):
+        raise AssertionError('Small operations must not query driver memory')
+
+    monkeypatch.setattr(torch.cuda, 'mem_get_info', forbidden)
+    assert adaptive_index_tile('cuda', 123, 0) == 123
+    assert adaptive_index_tile('cuda', 0, 0) == 1

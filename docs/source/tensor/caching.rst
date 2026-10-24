@@ -79,8 +79,8 @@ The entries, grouped by the area they serve:
    * - Block structure
      - ``get_blocks``, ``get_blocks_charges_all``, ``get_trimmed_struct_engine``,
        ``get_trimmed_struct_engine_gpu``
-   * - Backend (``torch`` only)
-     - ``pack_transpose_and_merge_params``, ``torch_recoupling_plan``, ``torch_fusion_scale``
+   * - Torch-based backends
+     - ``pack_transpose_and_merge_params``, ``device_merge_parameters``, ``torch_recoupling_plan``, ``torch_fusion_scale``
    * - Non-Abelian cuTENSOR packing
      - ``cutensor_nonabelian_packing``, ``cutensor_nonabelian_coefficients``
 
@@ -106,16 +106,17 @@ remembered and applied at registration time, so the ordering of ``set_cache_maxs
 Memory held by the caches
 -------------------------
 
-Most entries are small — tuples of integers and short NumPy index arrays. The exception is
-the torch backend's ``pack_transpose_and_merge_params``, which caches the index maps used
-by the GPU fuse/unfuse path (see
-:ref:`tensor/algebra:gpu execution: hybrid scatter/loop`). Those index tensors are moved
-onto the data's device on first use and stay there, so the entry pins GPU memory
-proportional to the size of the fused buffers it has seen.
+Most entries are small tuples or NumPy arrays. The Torch fuse/unfuse path caches
+block metadata, not full element-sized index maps: ``pack_transpose_and_merge_params``
+holds CPU parameters and ``device_merge_parameters`` keeps separate device copies,
+with a default capacity of 128 device entries. Storage grows with block count and
+rank, rather than the number of elements in fused buffers. The temporary index
+maps are bounded by the tile size and recomputed during backward, including in
+the hybrid path (see :ref:`tensor/algebra:gpu execution: hybrid scatter/loop`).
 
-:func:`yastn.clear_cache` is the lever for releasing them — worth calling between phases of
-a calculation that use very different tensor sizes, and worth knowing about when several
-worker processes each accumulate their own copy.
+:func:`yastn.clear_cache` releases cached metadata that is no longer referenced by
+an active autograd graph. This can help between phases with different tensor
+structures or when several worker processes each keep their own caches.
 
 Non-Abelian fusion-tree plans cache channel matching and recoupling coefficients,
 never tensor values. The scalar contraction and fusion coefficient caches each

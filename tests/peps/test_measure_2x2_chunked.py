@@ -135,3 +135,28 @@ def test_measure_2x2_chunked_gradient(config_kwargs, sym):
     for found, expected in zip(gradients, ref_grad):
         assert expected.norm().item() > 1e-10
         torch.testing.assert_close(found, expected, rtol=1e-9, atol=1e-10)
+
+
+@pytest.mark.parametrize('cache_bytes', [0, 64 << 20])
+def test_measure_2x2_reuses_corners(config_kwargs, monkeypatch, cache_bytes):
+    env, ops, _ = _random_env(config_kwargs)
+    reference = env.measure_2x2(ops.sz(), ops.sz(), sites=((0, 0), (1, 1)))
+    original = measure.tensordot
+    contractions = []
+
+    def record(a, b, *args, **kwargs):
+        if isinstance(b, fpeps.DoublePepsTensor):
+            contractions.append(b.has_operator_or_swap())
+        return original(a, b, *args, **kwargs)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Known boundary intervals must not rediscover mask nonzeros')
+
+    monkeypatch.setattr(measure, 'tensordot', record)
+    monkeypatch.setattr(measure, '_2X2_CORNER_CACHE_BYTES', cache_bytes)
+    monkeypatch.setattr(ops.config.backend, 'to_mask', forbidden)
+    actual = env.measure_2x2(ops.sz(), ops.sz(), sites=((0, 0), (1, 1)), chunk_size=1)
+    assert actual.item() == pytest.approx(reference.item(), rel=1e-11)
+    # Three chunks per side; only tl and br carry an operator.
+    assert len(contractions) == (18 if cache_bytes else 36)
+    assert sum(bool(c) for c in contractions) == (6 if cache_bytes else 12)

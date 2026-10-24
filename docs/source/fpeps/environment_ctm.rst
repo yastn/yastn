@@ -184,8 +184,9 @@ vectors. Each chunk contains at most ``chunk_size`` multiplicities across all
 sectors; SU2 irreps are never split. All pairs of left/right chunks contribute
 to the numerator and denominator, which are summed before normalization.
 The default ``chunk_size=None`` retains the original contraction. Smaller chunks
-trade repeated contractions for memory; the benefit depends on the boundary
-dimensions. Autograd remains supported, but saved intermediates can limit the
+trade repeated contractions for memory. Numerator and denominator reuse unchanged
+corners, and a local right-corner cache retains at most 64 MiB of tensor data.
+The benefit depends on the boundary dimensions. Autograd remains supported, but saved intermediates can limit the
 memory reduction when gradients are enabled.
 
 
