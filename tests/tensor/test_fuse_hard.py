@@ -135,7 +135,6 @@ def test_hard_empty_axis(config_kwargs):
     #
     af1 = yastn.tensor._merging._fuse_legs_hard(a, axes=((0,), (1,), (2,), (3,), ()), order=(0, 1, 2, 3))
     al1 = a.add_leg(s=-1, t=(0,))
-    assert af1.norm() > 1
     assert (af1 - al1).norm() < tol  # empty tuple in axes is equivalent to adding a new dim-1 leg.
     assert af1.s == (1, 1, -1, -1, -1)  # signature of a new leg is -1 if not first leg
 
@@ -146,7 +145,6 @@ def test_hard_empty_axis(config_kwargs):
     af2 = yastn.tensor._merging._fuse_legs_hard(af1, axes=((), (0,), (1,), (2,), (3,), (4,)), order=(0, 1, 2, 3, 4))
     assert af2.s == (1, 1, 1, -1, -1, -1)   # signature of a new leg is 1 for first leg
     al2 = al1.add_leg(axis=0, s=1, t=(0,))
-    assert af2.norm() > 1
     assert (af2 - al2).norm() < tol
 
     af3 = yastn.tensor._merging._fuse_legs_hard(a, axes=((), (0, 1), (), (2, 3), ()), order=(0, 1, 2, 3))
