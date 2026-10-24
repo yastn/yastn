@@ -350,11 +350,24 @@ def test_D3_U1_c4v_2x2_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
 @pytest.mark.parametrize("projector_svd_method", ["block_propack", "fullrank", "block_arnoldi", "qr"])
-def test_D3_U1_c4v_1x1_fp(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
+@pytest.mark.parametrize("use_autograd", [False, True], ids=["func_vjp", "autograd_grad"])
+def test_D3_U1_c4v_1x1_fp(ctm_init, truncate_multiplets_mode, projector_svd_method,
+                         additional_imports, monkeypatch, use_autograd):
     """
     Test fp gradients for explicit U(1) and C4v symmetric single-site ansatz
     for environments evaluated from C4v-symmetric CTM.
     """
+    from yastn.tn.fpeps.envs.fixed_pt_c4v import FixedPoint_c4v
+
+    original_forward = FixedPoint_c4v.forward
+
+    def forward(ctx, *args):
+        result = original_forward(ctx, *args)
+        # Exercise the cutensor fallback on the same real CTM state on CPU.
+        ctx.force_autograd = use_autograd
+        return result
+
+    monkeypatch.setattr(FixedPoint_c4v, 'forward', staticmethod(forward))
     A, A_grad_expected, cost_f = prepare_1x1(additional_imports, cost_U1_c4v_1x1_fp)
     test_elems = A[(0,0)]._data.clone()
     slices = {(0, 0): (slice(0, len(test_elems)), slice(0, len(test_elems)))}

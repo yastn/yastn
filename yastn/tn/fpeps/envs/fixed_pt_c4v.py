@@ -301,7 +301,6 @@ class FixedPoint_c4v(torch.autograd.Function):
     def backward(ctx, none0, none1, none2, *grad_env):
         verbosity = ctx.verbosity
         grads = grad_env
-        dA = grad_env
 
         env_data= ctx.saved_tensors[:-1]
         sigma_data, T_phase, C_phase = ctx.saved_tensors[-3], ctx.saved_tensors[-2], ctx.saved_tensors[-1]
@@ -314,9 +313,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         _env_ts, _env_slices = _concat_data(_env_data)
         _psi_data, _psi_meta = split_data_and_meta(env_dict['psi'])
 
-        prev_grad_tmp = None
-        diff_ave = None
-        # Compute vjp only
+        # Capture one CTM-step graph, shared by the A and C VJPs.
         with torch.enable_grad():
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
@@ -324,52 +321,64 @@ class FixedPoint_c4v(torch.autograd.Function):
                 _env_ts_g = _env_ts.detach().requires_grad_(True)
                 _psi_data_g = tuple(p.detach().requires_grad_(True) for p in _psi_data)
                 _out_t, = FixedPoint_c4v.fixed_point_iter(sigma, T_phase, C_phase, ctx.opts, env_dict, _env_meta, _env_slices, _psi_meta, _env_ts_g, _psi_data_g)
-                # retain_graph: the same graph serves every Neumann step
-                dfdC_vjp= lambda x: torch.autograd.grad(_out_t, (_env_ts_g,), grad_outputs=x[0], retain_graph=True)
-                def dfdA_vjp(x):
-                    res = torch.autograd.grad(_out_t, _psi_data_g, grad_outputs=x[0], retain_graph=True, allow_unused=True)
-                    return (tuple(torch.zeros_like(t) if r is None else r for r, t in zip(res, _psi_data_g)),)
+
+                def dfdCA_vjp(x):
+                    # Both leaf sets share one graph traversal per cotangent.
+                    # Retain the graph for subsequent Neumann iterations.
+                    g, = x
+                    res = torch.autograd.grad(
+                        _out_t, (_env_ts_g,) + _psi_data_g,
+                        grad_outputs=g, retain_graph=True, allow_unused=True)
+                    dC = res[0] if res[0] is not None else torch.zeros_like(_env_ts_g)
+                    dA = tuple(r if r is not None else torch.zeros_like(t)
+                               for r, t in zip(res[1:], _psi_data_g))
+                    return (dC,), dA
             else:
-                # _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-                # _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
                 _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(sigma, T_phase, C_phase, ctx.opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
-                dfdC_vjp= lambda x: (df_vjp(x)[0],)
-                dfdA_vjp= lambda x: (df_vjp(x)[1],)
+
+                def dfdCA_vjp(x):
+                    dC, dA = df_vjp(x)
+                    return (dC,), dA
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_postvjp_CUDAMEM.pickle")
 
-        # Budget and tolerance are the FP step's, carried over from the forward
-        # by design: this loop reverses that CTM step.
+        # As in the generic fixed-point backward, apply both Jacobians to the
+        # same Neumann term and accumulate the PEPS-space result directly:
+        # S = sum_k (df/dA)^T (df/dC)^(T k) v. No final A-only VJP is needed.
+        # Convergence uses the full increment of S, not the C-space cotangent.
+        # Keep the estimate with the smallest increment if improvement stalls.
+        # Budget and tolerance are inherited from the FP CTM-step options.
         neumann_max_iter, neumann_tol = ctx.opts.fp.max_sweeps, ctx.opts.fp.corner_tol
-        alpha = 0.4
+        patience = ctx.opts.neumann_patience
+        best_grad_diff = float('inf')
+        best_S = None
+        S = None
+        prev_grad_tmp = None
+        stall = 0
         for step in range(neumann_max_iter):
-            grads = dfdC_vjp(grads)
-            if all([torch.norm(grad, p=torch.inf) < neumann_tol for grad in grads]):
-                break
-            else:
-                dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
-            # for grad in grads:
-            #     print(torch.norm(grad, p=torch.inf))
+            nxt, dA_term = dfdCA_vjp(grads)
+            S = dA_term if S is None else tuple(a + b for a, b in zip(S, dA_term))
+            if best_S is None:
+                best_S = S
+            grads = nxt
 
-            if step % 10 == 0:
-                grad_tmp = torch.cat(dfdA_vjp(dA)[0])
-                if prev_grad_tmp is not None:
-                    grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
-                    # print("full grad diff", grad_diff)
-                    if grad_diff < neumann_tol:
-                        log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {neumann_tol}.")
+            grad_tmp = torch.cat(S)
+            if prev_grad_tmp is not None:
+                grad_diff = torch.norm(grad_tmp - prev_grad_tmp).item()
+                if grad_diff < neumann_tol:
+                    best_S = S
+                    log.info(f"Fixed_pt_c4v: The norm of the full grad diff is below {neumann_tol}.")
+                    break
+                if grad_diff < best_grad_diff:
+                    best_grad_diff, best_S, stall = grad_diff, S, 0
+                else:
+                    stall += 1
+                    if stall >= patience:
+                        log.info(f"Fixed_pt_c4v: Full grad diff stopped decreasing for {patience} steps "
+                                 f"(best {best_grad_diff:.3e} at the kept estimate); stopping Neumann.")
                         break
-                    if diff_ave is not None:
-                        if grad_diff > diff_ave:
-                            # print("Full grad diff is no longer decreasing!")
-                            log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
-                            break
-                        else:
-                            diff_ave = alpha*grad_diff + (1-alpha)*diff_ave
-                    else:
-                        diff_ave = grad_diff
-                prev_grad_tmp = grad_tmp
+            prev_grad_tmp = grad_tmp
 
-        dA = dfdA_vjp(dA)[0]
+        dA = best_S
         # one grad per forward input: (env, opts, *state_params)
         return None, None, *dA
