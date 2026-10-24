@@ -489,6 +489,8 @@ _DIAGRAMS = [
 def test_ncon_order_independence(config_kwargs):
     """Typical diagrams: the value does not depend on the order, and no step needs a gadget."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    # Keep the nonzero-reference and nontrivial-swap checks reproducible.
+    config_Z2.backend.random_seed(0)
     mk = lambda: yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 2))
     for name, inds, swap, orders, charges in _DIAGRAMS:
         ts = _mini_tensors(config_Z2, mk, inds, charges)
@@ -497,10 +499,11 @@ def test_ncon_order_independence(config_kwargs):
             assert not any(c[0].endswith('_psplit') for c in _plan(inds, swap, order)), name
             vals.append(yastn.ncon(ts, inds, swap=swap, order=order))
         ref = vals[0]
-        den = max(float(ref.norm().item()), 1.0)
+        ref_norm = float(ref.norm().item())
+        den = max(ref_norm, 1.0)
         for v in vals[1:]:
             assert (v - ref).norm().item() < tol * den, name
-        assert den > tol, name  # the diagram is not accidentally zero
+        assert ref_norm > tol, name  # the diagram is not accidentally zero
         no_swap = yastn.ncon(ts, inds, order=orders[0])
         assert (ref - no_swap).norm().item() > 1e-3 * den, name  # the swaps are not trivial
 
