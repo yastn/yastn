@@ -245,6 +245,7 @@ def _filter_tensor_blocks(tensor, block_indices):
 
     ``block_indices`` index into ``get_blocks(sym, tensor.struct).t`` order
     (the same order fed to :func:`ncon_prefilter`).  ``None`` keeps all blocks.
+    A scalar with no retained blocks is represented by its one-element zero.
     """
     if block_indices is None:
         return tensor
@@ -256,6 +257,10 @@ def _filter_tensor_blocks(tensor, block_indices):
 
     indices = sorted(block_indices)
     if not indices:
+        if tensor.ndim_n == 0:
+            # A neutral scalar has one allowed block and no leg sectors to
+            # remove. Keep that block and its zero derivative in autograd.
+            return tensor * 0
         # zero contraction: strip all charges from every native leg
         empty_legs = tuple(leg._replace(t=(), D=()) for leg in tensor.struct.legs)
         new_struct = get_trimmed_struct(sym, tensor.struct, empty_legs)
