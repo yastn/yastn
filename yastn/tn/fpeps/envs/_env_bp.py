@@ -24,8 +24,9 @@ from .._evolution import BipartiteBondMetric, BondMetric
 from .._gates_auxiliary import gate_fix_swap_gate, match_ancilla, clear_projectors, clear_operator_input
 from .._geometry import Bond, Site, Lattice
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
+from ...._profile import nsys_profile
 from ....initialize import eye
-from ....tensor import YastnError, tensordot, vdot, ncon, Tensor, add as tensor_add
+from ....tensor import YastnError, tensordot, vdot, ncon, Tensor, add as tensor_add, sign_canonical_order
 
 
 class BP_out(NamedTuple):
@@ -271,6 +272,95 @@ class EnvBP():
 
         return val_op / val_no
 
+    def measure_diagonal(self, O, P, bond, displacement) -> Tensor:
+        r"""Measure a diagonal pair by contracting its BP-dressed 2x2 plaquette.
+
+        ``bond`` preserves the operator-to-endpoint ordering; ``displacement``
+        is the row/column shift from its first endpoint to its second.  The
+        plaquette is a BP cluster approximation, not a converged CTM patch.
+        """
+        s0, s1 = bond
+        dx, dy = displacement
+        if abs(dx) != 1 or abs(dy) != 1:
+            raise YastnError("Diagonal BP measurements require a one-step diagonal displacement.")
+        if self.nn_site(s0, displacement) != s1:
+            raise YastnError("The displacement does not connect the supplied BP bond endpoints.")
+
+        minx, miny = min(0, dx), min(0, dy)
+        positions = (Site(minx, miny), Site(minx, miny + 1),
+                     Site(minx + 1, miny), Site(minx + 1, miny + 1))
+        p0, p1 = Site(0, 0), Site(dx, dy)
+        ops = {p0: O, p1: P}
+        sign = sign_canonical_order(O, P, sites=(p0, p1), f_ordered=self.f_ordered)
+
+        # Translated copies are needed for a one-site periodic unit cell, where
+        # all four plaquette corners otherwise index the same PEPS tensor.
+        base = s0
+        tensors, messages = {}, {}
+        for pos in positions:
+            site = self.nn_site(base, (pos[0], pos[1]))
+            if site is None:
+                raise YastnError("Diagonal BP measurements require a periodic plaquette.")
+            ten = self.psi[site]
+            tensors[pos] = type(ten)(ten.bra, ten.ket, trans=ten.trans, swaps=ten.swaps)
+            messages[pos] = {
+                d: getattr(self[site], d).fuse_legs(axes=((0, 1),)).conj()
+                for d in ("t", "l", "b", "r")
+            }
+
+        # Match the canonical fermionic charge strings used by the exact CTM
+        # patch contraction, now over four BP-dressed local double layers.
+        axes_x, axes_y = ["b3", "k4", "k1"], ["k2", "k4", "b0"]
+        for pos in sorted(positions):
+            if pos not in ops:
+                continue
+            ten = tensors[pos]
+            ten.set_operator_(ops[pos])
+            if pos[0] > minx:
+                ten.add_charge_swaps_(ops[pos].n, axes="k1")
+                for x in range(pos[0] - 1, minx, -1):
+                    tensors[Site(x, pos[1])].add_charge_swaps_(ops[pos].n, axes=axes_x)
+                tensors[Site(minx, pos[1])].add_charge_swaps_(ops[pos].n, axes=["b3", "k4"])
+            if pos[1] > miny:
+                tensors[Site(minx, pos[1])].add_charge_swaps_(ops[pos].n, axes="b0")
+                for y in range(pos[1] - 1, miny, -1):
+                    tensors[Site(minx, y)].add_charge_swaps_(ops[pos].n, axes=axes_y)
+                tensors[Site(minx, miny)].add_charge_swaps_(ops[pos].n, axes=["k2", "k4"])
+
+        def corner(pos, exterior):
+            ten = tensors[pos].fuse_layers()
+            # Contract external BP messages in reverse axis order so the
+            # remaining legs stay in canonical t,l,b,r order.
+            for direction, axis in sorted(exterior, key=lambda item: item[1], reverse=True):
+                ten = tensordot(ten, messages[pos][direction], axes=(axis, 0))
+            return ten
+
+        def contract():
+            tl, tr = Site(minx, miny), Site(minx, miny + 1)
+            bl, br = Site(minx + 1, miny), Site(minx + 1, miny + 1)
+            c_tl = corner(tl, (("t", 0), ("l", 1)))
+            c_tr = corner(tr, (("t", 0), ("r", 3)))
+            c_bl = corner(bl, (("l", 1), ("b", 2)))
+            c_br = corner(br, (("b", 2), ("r", 3)))
+            top = tensordot(c_tl, c_tr, axes=(1, 0))
+            bottom = tensordot(c_bl, c_br, axes=(1, 1))
+            return tensordot(top, bottom, axes=((0, 1), (0, 1)))
+
+        try:
+            val_op = contract()
+        finally:
+            for ten in tensors.values():
+                ten.del_operator_()
+                ten.del_charge_swaps_()
+        # Rebuild operator-free copies for the normalization contraction.
+        for pos in positions:
+            site = self.nn_site(base, pos)
+            ten = self.psi[site]
+            tensors[pos] = type(ten)(ten.bra, ten.ket, trans=ten.trans, swaps=ten.swaps)
+        val_no = contract()
+        return sign * val_op.to_number() / val_no.to_number()
+
+    @nsys_profile
     def update_(self) -> float:
         r"""
         Perform one step of BP update. Environment tensors are updated in place.
@@ -287,6 +377,7 @@ class EnvBP():
         #
         return max(diffs)
 
+    @nsys_profile
     def update_bond_(env, bond):
         #
         env_tmp = env  # update env in-place
@@ -670,6 +761,7 @@ class EnvBP():
     def move_to_patch(self, sites):
         self.env.move_to_patch(sites)
 
+    @nsys_profile
     def pre_truncation_(env, sites):
         if len(sites) > 2:
             for s0, s1 in pairwise(sites[-1::-1]):
@@ -677,6 +769,7 @@ class EnvBP():
             for s0, s1 in pairwise(sites):
                 env.update_bond_((s0, s1))
 
+    @nsys_profile
     def post_truncation_(env, bond, max_sweeps=0, **kwargs):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])
