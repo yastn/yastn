@@ -513,31 +513,42 @@ def test_si_rejects_insufficient_corner_capacity(config_kwargs):
         initialize_si_bases(r0, r1, rank=8)
 
 
-def test_si_rejects_mismatched_ctm_corner_halves(config_kwargs):
-    """Both closures of the CTM corner loop must match sector by sector."""
+def test_si_allows_unequal_external_ctm_corner_legs(config_kwargs):
+    """Independent SI row spaces may have unequal charge-sector dimensions."""
     config = yastn.make_config(sym='U1', **config_kwargs)
     r0, r1 = _ctm_corner_pair(config, 'U1')
-    bad_external = yastn.Leg(
+    unequal_external = yastn.Leg(
         config, s=-1, t=(-1, 0, 1), D=(3, 2, 2))
+    r1_unequal = yastn.rand(config, legs=(unequal_external, r1.get_legs(1)))
+    capacity = si_module._ctm_shared_sector_capacity(r0, r1_unequal)
+    for charge, dimension in capacity.items():
+        assert dimension == min(r0.get_legs(0).tD[charge],
+                                r1_unequal.get_legs(0).tD[charge])
+    rank = sum(capacity.values())
+    X, Y = initialize_si_bases(r0, r1_unequal, rank=rank)
+    assert si_bases_compatible(r0, r1_unequal, X, Y)
+    p0, p1, _, _, _ = si_proj_corners(
+        r0, r1_unequal, {'D_total': rank - 1},
+        {'enabled': True, 'oversampling': 1, 'niter': 2})
+    assert p0 is not None and p1 is not None
+    p0_full, p1_full = proj_corners(
+        r0, r1_unequal, opts_svd={'D_total': rank - 1})
+    assert p0_full is not None and p1_full is not None
+
+
+def test_si_rejects_mismatched_ctm_contracted_legs(config_kwargs):
+    """The inner closure of a CTM corner pair must remain contractible."""
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    r0, r1 = _ctm_corner_pair(config, 'U1')
     bad_contracted = yastn.Leg(
         config, s=1, t=(-1, 0, 1), D=(5, 4, 4))
-    malformed_pairs = (
-        (r0, yastn.rand(config, legs=(bad_external, r1.get_legs(1)))),
-        (r0, yastn.rand(config, legs=(r1.get_legs(0), bad_contracted))),
-    )
-    message = 'matching dimensions in every shared charge sector'
+    r1_bad = yastn.rand(config, legs=(r1.get_legs(0), bad_contracted))
+    message = 'contractible inner legs'
     opts_si = {'enabled': True, 'oversampling': 1, 'niter': 2}
-    for r0_bad, r1_bad in malformed_pairs:
-        with pytest.raises(yastn.YastnError, match=message):
-            initialize_si_bases(r0_bad, r1_bad, rank=3)
-        with pytest.raises(yastn.YastnError, match=message):
-            si_proj_corners(r0_bad, r1_bad, {'D_total': 3}, opts_si)
-
-    # The precondition belongs to SI alone: the dense path contracts the same
-    # halves happily, and must keep doing so.
-    p0, p1 = proj_corners(r0, malformed_pairs[0][1], opts_svd={'D_total': 3})
-    assert p0 is not None and p1 is not None
-
+    with pytest.raises(yastn.YastnError, match=message):
+        initialize_si_bases(r0, r1_bad, rank=3)
+    with pytest.raises(yastn.YastnError, match=message):
+        si_proj_corners(r0, r1_bad, {'D_total': 3}, opts_si)
 
 def test_si_recycles_after_leg_dimension_change(config_kwargs):
     """Stale bases do not affect projectors after corner dimensions change."""

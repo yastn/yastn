@@ -283,31 +283,25 @@ def _distribute_si_rank_with_capacity(capacities, rank):
 
 
 def _validate_ctm_corner_pair(r0, r1):
-    """Validate the two closures of a pair of CTM corner halves.
+    """Validate the contracted legs of a pair of CTM corner halves.
 
     The contracted legs are closed on each other, so they have to be
-    contractible. The external legs only carry the SI bases, where matching
-    dimensions of shared charges suffice; their fusion histories may differ,
-    which invalidates recycled bases but not the corners.
+    contractible. The external legs carry separate SI bases and may have
+    different dimensions in the same charge sector. Their common capacity
+    limits the number of SI columns in that sector.
     """
-    for axis in (0, 1):
-        leg0 = r0.get_legs(axis)
-        leg1 = r1.get_legs(axis)
-        tD0, tD1 = leg0.tD, leg1.tD
-        consistent = leg0.are_consistent(leg1) if axis else \
-            all(tD0[charge] == tD1[charge] for charge in tD0.keys() & tD1.keys())
-        if not consistent: raise YastnError(
-                "CTM corner halves must have matching dimensions in every "
-                "shared charge sector on both loop closures; "
-                f"mismatch on axis {axis}.")
+    if not r0.get_legs(1).are_consistent(r1.get_legs(1)):
+        raise YastnError(
+            "CTM corner halves must have contractible inner legs; "
+            "mismatch on axis 1.")
 
 
 def _ctm_shared_sector_capacity(r0, r1):
     """Return capacities of sectors supported by both CTM corner halves."""
     capacity0 = r0.get_legs(0).tD
     capacity1 = r1.get_legs(0).tD
-    return {charge: dimension for charge, dimension in capacity0.items()
-            if charge in capacity1}
+    return {charge: min(dimension, capacity1[charge])
+            for charge, dimension in capacity0.items() if charge in capacity1}
 
 
 def initialize_si_bases(r0, r1, rank, charges=None):
