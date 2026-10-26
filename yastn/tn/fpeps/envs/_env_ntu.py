@@ -13,8 +13,19 @@
 # limitations under the License.
 # ==============================================================================
 from ._env_contractions import *
-from .._evolution import BondMetric
+from .._evolution import BondMetric, _normalize_metric
+from ...._profile import nsys_profile
 from ....tensor import tensordot, YastnError, ncon
+
+
+def _normalize_environment(tensor):
+    """Remove scalar scales before further homogeneous norm contractions."""
+    return _normalize_metric(tensor, "NTU NN+ environment contraction")
+
+
+def _cut_normalized_hairs(tensor):
+    return tuple(_normalize_environment(hair) for hair in
+                 cut_into_hairs(_normalize_environment(tensor)))
 
 
 class EnvNTU:
@@ -59,6 +70,7 @@ class EnvNTU:
     def post_truncation_(env, bond, **kwargs):
         pass
 
+    @nsys_profile
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculate bond metric. The environment size is controlled by ``which``.
@@ -165,6 +177,7 @@ class EnvNTU:
         raise YastnError(f" Type of EnvNTU which={self.which} not recognized.")
 
 
+    @nsys_profile
     def _g_NN(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculates metric tensor within "NTU-NN" approximation.
@@ -212,6 +225,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
+    @nsys_profile
     def _g_NNp(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculates the metric tensor within "NTU-NN+" approximation.
@@ -248,22 +262,31 @@ class EnvNTU:
                    (-1,1), (-1,0), (0,-2), (2,0), (2,1), (0,3), (-2,1), (-2,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
-            htl_t, htl_l = cut_into_hairs(cor_tl(m[-1,-1]))
-            htr_r, htr_t = cut_into_hairs(cor_tr(m[-1, 2]))
-            hbr_b, hbr_r = cut_into_hairs(cor_br(m[1, 2]))
-            hbl_l, hbl_b = cut_into_hairs(cor_bl(m[1, -1]))
+            norm = _normalize_environment
+            htl_t, htl_l = _cut_normalized_hairs(cor_tl(m[-1,-1]))
+            htr_r, htr_t = _cut_normalized_hairs(cor_tr(m[-1, 2]))
+            hbr_b, hbr_r = _cut_normalized_hairs(cor_br(m[1, 2]))
+            hbl_l, hbl_b = _cut_normalized_hairs(cor_bl(m[1, -1]))
 
-            env_l = edge_l(Q0, hair_l(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t, hb=hbl_b))  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(Q1, hair_r(m[0, 2], hr=hair_r(m[0, 3]), ht=htr_t, hb=hbr_b))  # [tr tr'] [ll ll'] [br br']
+            hl = norm(hair_l(m[0,-2]))
+            hr = norm(hair_r(m[0, 3]))
+            hl = norm(hair_l(m[0,-1], hl=hl, ht=htl_t, hb=hbl_b))
+            hr = norm(hair_r(m[0, 2], hr=hr, ht=htr_t, hb=hbr_b))
+            env_l = norm(edge_l(Q0, hl))  # [bl bl'] [rr rr'] [tl tl']
+            env_r = norm(edge_r(Q1, hr))  # [tr tr'] [ll ll'] [br br']
 
-            hm1p0_t, hm1p1_t = cut_into_hairs(cor_tl(m[-2, 0]) @ cor_tr(m[-2, 1]))
-            hp1p1_b, hp1p0_b = cut_into_hairs(cor_br(m[2, 1]) @ cor_bl(m[2, 0]))
+            hm1p0_t, hm1p1_t = _cut_normalized_hairs(norm(cor_tl(m[-2, 0])) @ norm(cor_tr(m[-2, 1])))
+            hp1p1_b, hp1p0_b = _cut_normalized_hairs(norm(cor_br(m[2, 1])) @ norm(cor_bl(m[2, 0])))
 
-            ctl = cor_tl(m[-1, 0], ht=hm1p0_t, hl=htl_l)
-            ctr = cor_tr(m[-1, 1], ht=hm1p1_t, hr=htr_r)
-            cbr = cor_br(m[ 1, 1], hb=hp1p1_b, hr=hbr_r)
-            cbl = cor_bl(m[ 1, 0], hb=hp1p0_b, hl=hbl_l)
-            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+            ctl = norm(cor_tl(m[-1, 0], ht=hm1p0_t, hl=htl_l))
+            ctr = norm(cor_tr(m[-1, 1], ht=hm1p1_t, hr=htr_r))
+            cbr = norm(cor_br(m[ 1, 1], hb=hp1p1_b, hr=hbr_r))
+            cbl = norm(cor_bl(m[ 1, 0], hb=hp1p0_b, hl=hbl_l))
+            # Overall metric scales cancel from the normalized error, so
+            # remove them before the final products can underflow.
+            left = norm(norm(cbr @ cbl) @ env_l)
+            right = norm(norm(ctl @ ctr) @ env_r)
+            g = norm(tensordot(left, right, axes=((0, 2), (2, 0))))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1),
@@ -271,25 +294,33 @@ class EnvNTU:
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
-            htl_t, htl_l = cut_into_hairs(cor_tl(m[-1,-1]))
-            htr_r, htr_t = cut_into_hairs(cor_tr(m[-1, 1]))
-            hbr_b, hbr_r = cut_into_hairs(cor_br(m[2, 1]))
-            hbl_l, hbl_b = cut_into_hairs(cor_bl(m[2, -1]))
+            norm = _normalize_environment
+            htl_t, htl_l = _cut_normalized_hairs(cor_tl(m[-1,-1]))
+            htr_r, htr_t = _cut_normalized_hairs(cor_tr(m[-1, 1]))
+            hbr_b, hbr_r = _cut_normalized_hairs(cor_br(m[2, 1]))
+            hbl_l, hbl_b = _cut_normalized_hairs(cor_bl(m[2, -1]))
 
-            env_t = edge_t(Q0, hair_t(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l, hr=htr_r))  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0]), hl=hbl_l, hr=hbr_r))  # [rb rb'] [tt tt'] [lb lb']
+            ht = norm(hair_t(m[-2, 0]))
+            hb = norm(hair_b(m[ 3, 0]))
+            ht = norm(hair_t(m[-1, 0], ht=ht, hl=htl_l, hr=htr_r))
+            hb = norm(hair_b(m[ 2, 0], hb=hb, hl=hbl_l, hr=hbr_r))
+            env_t = norm(edge_t(Q0, ht))  # [lt lt'] [bb bb'] [rt rt']
+            env_b = norm(edge_b(Q1, hb))  # [rb rb'] [tt tt'] [lb lb']
 
-            hp1m1_l, hp0m1_l = cut_into_hairs(cor_bl(m[1, -2]) @ cor_tl(m[0, -2]))
-            hp0p1_r, hp1p1_r = cut_into_hairs(cor_tr(m[0, 2]) @ cor_br(m[1, 2]))
+            hp1m1_l, hp0m1_l = _cut_normalized_hairs(norm(cor_bl(m[1, -2])) @ norm(cor_tl(m[0, -2])))
+            hp0p1_r, hp1p1_r = _cut_normalized_hairs(norm(cor_tr(m[0, 2])) @ norm(cor_br(m[1, 2])))
 
-            cbl = cor_bl(m[1,-1], hl=hp1m1_l, hb=hbl_b)
-            ctl = cor_tl(m[0,-1], hl=hp0m1_l, ht=htl_t)
-            ctr = cor_tr(m[0, 1], hr=hp0p1_r, ht=htr_t)
-            cbr = cor_br(m[1, 1], hr=hp1p1_r, hb=hbr_b)
-            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+            cbl = norm(cor_bl(m[1,-1], hl=hp1m1_l, hb=hbl_b))
+            ctl = norm(cor_tl(m[0,-1], hl=hp0m1_l, ht=htl_t))
+            ctr = norm(cor_tr(m[0, 1], hr=hp0p1_r, ht=htr_t))
+            cbr = norm(cor_br(m[1, 1], hr=hp1p1_r, hb=hbr_b))
+            top = norm(norm(cbl @ ctl) @ env_t)
+            bottom = norm(norm(ctr @ cbr) @ env_b)
+            g = norm(tensordot(top, bottom, axes=((0, 2), (2, 0))))  # [bb bb'] [tt tt']
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
+    @nsys_profile
     def _g_NNpp(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculates the metric tensor within "NTU-NN++" approximation.
@@ -422,6 +453,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
+    @nsys_profile
     def _g_NNN(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculates the metric tensor within "NTU-NNN" approximation.
@@ -491,6 +523,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
+    @nsys_profile
     def _g_NNNp(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculates the metric tensor within "NTU-NNN+" approximation.
@@ -576,6 +609,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
+    @nsys_profile
     def _g_NNNpp(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculates the metric tensor within using "NTU-NNN++" approximation.
@@ -760,6 +794,7 @@ class EnvNTU:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
+    @nsys_profile
     def _g_Ladder(self, Q0, Q1, s0, s1, dirn):
         r"""
         Calculates metric tensor within "NTU-NN" approximation.

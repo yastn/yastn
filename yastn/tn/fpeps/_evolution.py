@@ -21,6 +21,7 @@ import numpy as np
 from ._gates_auxiliary import Gate, gate_from_mpo
 from ._peps import Peps2Layers
 from ..mps import MpsMpoOBC
+from ..._profile import nsys_profile, nvtx_range
 from ...tensor import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 
 
@@ -50,6 +51,38 @@ class Evolution_out(NamedTuple):
     truncated_sectors:dict[str, tuple] = ()
 
 
+class _NoPositiveMetricSupport(YastnError):
+    """The requested least-squares problem has no resolvable metric support."""
+
+
+def _normalize_metric(metric, name):
+    """Remove a scalar metric scale before contractions or diagonalization."""
+    scale = metric.norm(p='inf').item()
+    if not np.isfinite(scale) or scale <= 0:
+        raise _NoPositiveMetricSupport(f"{name} has zero, empty, or non-finite support.")
+    return _divide_metric_scale(metric, scale)
+
+
+def _divide_metric_scale(tensor, scale):
+    # NumPy complex division can overflow its reciprocal for a subnormal
+    # denominator even when every quotient is bounded. Two finite divisions
+    # keep that intermediate reciprocal representable.
+    tiny = np.finfo(float).tiny
+    if scale < tiny:
+        return (tensor / tiny) / (scale / tiny)
+    return tensor / scale
+
+
+def _positive_metric_spectrum(metric, cutoff, name):
+    metric = _normalize_metric(metric, name)
+    metric = (metric + metric.H) / 2
+    S, U = metric.eigh_with_truncation(axes=(0, 1), tol=cutoff)
+    if len(S._data) == 0:
+        raise _NoPositiveMetricSupport(f"{name} has no positive eigenvalue support at cutoff {cutoff}.")
+    return S, U
+
+
+@nsys_profile()
 def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
                     max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
@@ -119,17 +152,21 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
         gates = [ng for og in gates for ng in split_gate_2site(og)]
 
     for gate in gates:
-        psi.move_to_patch(gate.sites)
-        psi.apply_gate_(gate)
+        with nvtx_range(f"gate sites={gate.sites}"):
+            with nvtx_range("gate.apply"):
+                psi.move_to_patch(gate.sites)
+                psi.apply_gate_(gate)
 
-        env.move_to_patch(gate.sites)
-        env.pre_truncation_(gate.sites)
-        for s0, s1 in pairwise(gate.sites):
-            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, opts_post_truncation)
-            infos.append(info)
+            with nvtx_range("environment.prepare"):
+                env.move_to_patch(gate.sites)
+                env.pre_truncation_(gate.sites)
+            for s0, s1 in pairwise(gate.sites):
+                info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, opts_post_truncation)
+                infos.append(info)
 
-        psi.apply_patch()
-        env.apply_patch()
+            with nvtx_range("gate.apply_patch"):
+                psi.apply_patch()
+                env.apply_patch()
     return infos
 
 
@@ -151,6 +188,7 @@ def split_gate_2site(gate):
     return new_gates
 
 
+@nsys_profile()
 def truncate_(env, opts_svd, bond=None,
               fix_metric=0,
               pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
@@ -234,7 +272,8 @@ def truncate_(env, opts_svd, bond=None,
             Q0, R0 = psi[s0].qr(axes=((0, 1, 3, 4), 2), sQ=1, Qaxis=2)  # t l bb r sa @ bb b
             Q1, R1 = psi[s1].qr(axes=((1, 2, 3, 4), 0), sQ=-1, Qaxis=0, Raxis=-1)  # tt l b r sa @ t tt
 
-        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
+        with nvtx_range(f"bond_metric bond={bond}"):
+            fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
         if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
             M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)
@@ -248,7 +287,8 @@ def truncate_(env, opts_svd, bond=None,
             psi[s0] = tensordot(Q0, M0, axes=(2, 0)).transpose(axes=(0, 1, 4, 2, 3))  # t l b r sa
             psi[s1] = tensordot(M1, Q1, axes=(1, 0)) # t l b r sa
 
-        env.post_truncation_(bond, **opts_post_truncation)
+        with nvtx_range("environment.post_truncation"):
+            env.post_truncation_(bond, **opts_post_truncation)
         infos.append(Evolution_out(**info))
     return infos[0] if len(bonds) == 1 else infos
 
@@ -267,6 +307,7 @@ def build_g_rj(r_slices: dict, G0: Tensor):
     g = (g + g.T.conjugate()) / 2
     return g
 
+@nsys_profile()
 def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial=None):
 
     if opts_svd.get("preD") is None:
@@ -448,6 +489,7 @@ def build_g_ijkl(fgf: Tensor, R0: Tensor, R1: Tensor):
     return (g + g.T.conjugate()) / 2
 
 
+@nsys_profile()
 def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs, pre_initial=None):
 
     if opts_svd.get("preD") is None:
@@ -544,9 +586,10 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
     return (MA, MB), error2, loopiness
 
 
+@nsys_profile()
 def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
     # enforce hermiticity
-    fgf = g.g
+    fgf = _normalize_metric(g.g, "Bond metric")
     fgfH = fgf.H
     nonhermitian = (fgf - fgfH).norm() / 2
     fgf = (fgf + fgfH) / 2
@@ -567,6 +610,8 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
     RRgRR = abs(vdot(fRR, fgRR).item())
+    if not np.isfinite(RRgRR) or RRgRR <= 0:
+        raise _NoPositiveMetricSupport("Untruncated bond has zero or non-finite norm in its metric.")
     #
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
@@ -663,27 +708,53 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
     return M0, M1, info
 
 
+@nsys_profile()
 def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
     #
     E0, E1 = g.gL, g.gR
+    E0 = _normalize_metric(E0, "Left bipartite metric")
+    E1 = _normalize_metric(E1, "Right bipartite metric")
     E0 = (E0 + E0.H) / 2
     E1 = (E1 + E1.H) / 2
     #
     RR = (R0 @ R1)
     gRR = E0 @ RR @ E1
     RRgRR = abs(vdot(RR, gRR).item())
+    if not np.isfinite(RRgRR) or RRgRR <= 0:
+        raise _NoPositiveMetricSupport("Untruncated bond has zero or non-finite norm in its bipartite metric.")
+
+    # Independently thresholding the two projected metrics can remove all
+    # common charge sectors, even while RR has a positive metric norm. Keep
+    # a physical SVD candidate and compare every candidate in the original
+    # metric, so regularization cannot silently annihilate the PEPS.
+    M0, M1 = symmetrized_svd(R0, R1, opts_svd, normalize=False)
+    delta = RR - M0 @ M1
+    error2 = abs(vdot(delta, E0 @ delta @ E1).item()) / RRgRR
+    if not np.isfinite(error2) or not len(M0._data) or not len(M1._data):
+        error2 = float('inf')
+    svd_error2 = error2
+    best_method, pinv_c = 'bipartite_svd', None
     #
     F0 = R0.H @ E0 @ R0
     F1 = R1 @ E1 @ R1.H
     #
     min_pinv_cutoff = min(pinv_cutoffs)
-    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
-    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
+    try:
+        S0, U0 = _positive_metric_spectrum(F0, min_pinv_cutoff, "Left projected bipartite metric")
+        S1, U1 = _positive_metric_spectrum(F1, min_pinv_cutoff, "Right projected bipartite metric")
+    except _NoPositiveMetricSupport:
+        if error2 >= 1:
+            raise _NoPositiveMetricSupport("Bipartite truncation has no supported nonzero candidate at the requested cutoffs.")
+        info['best_method'] = best_method
+        info['truncation_errors'] = {best_method: error2 ** 0.5}
+        info['truncation_error'] = error2 ** 0.5
+        info['pinv_cutoffs'] = pinv_c
+        return M0, M1, info
     #
     W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
     p0, p1 = R0 @ U0, U1.H @ R1
     #
-    error2, s0max, s1max = 100, max(S0._data), max(S1._data)
+    s0max, s1max = S0._data.max().item(), S1._data.max().item()
     vs0o, vs1o = len(S0._data) + 1, len(S1._data) + 1
     for c_off in sorted(pinv_cutoffs):
         vs0 = (S0._data > c_off * s0max).sum().item()
@@ -694,11 +765,15 @@ def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
             M1_tmp = W1 @ S1.reciprocal(cutoff=c_off * s1max).sqrt() @ p1
             delta = RR - M0_tmp @ M1_tmp
             error2_tmp = abs(vdot(delta, E0 @ delta @ E1).item()) / RRgRR
-            if error2_tmp < error2:
+            if np.isfinite(error2_tmp) and len(M0_tmp._data) and len(M1_tmp._data) and error2_tmp < error2:
                 M0, M1, error2, pinv_c = M0_tmp, M1_tmp, error2_tmp, c_off
+                best_method = 'bipartite'
 
-    info['best_method'] = 'bipartite'
-    info['truncation_errors'] = {'bipartite': error2 ** 0.5}
+    if error2 >= 1:
+        raise _NoPositiveMetricSupport("Bipartite truncation has no supported nonzero candidate at the requested cutoffs.")
+
+    info['best_method'] = best_method
+    info['truncation_errors'] = {'bipartite_svd': svd_error2 ** 0.5, best_method: error2 ** 0.5}
     info['truncation_error'] = error2 ** 0.5
     info['pinv_cutoffs'] = pinv_c
     return M0, M1, info
@@ -749,13 +824,14 @@ def accumulated_truncation_error(infoss, statistics='mean'):
     return Delta
 
 
+@nsys_profile()
 def symmetrized_svd(R0, R1, opts_svd, normalize=False):
     """ SVD truncation of central tensor; divide singular values symmetrically between tensors. """
     Q0, R0 = R0.qr(axes=(0, 1))
     Q1, R1 = R1.qr(axes=(1, 0), Qaxis=0, Raxis=1)
     U, S, V = svd_with_truncation(R0 @ R1, sU=R0.s[1], **opts_svd)
     if normalize:
-        S = S / S.norm(p='inf')
+        S = _normalize_metric(S, "Truncated singular-value spectrum")
     S = S.sqrt()
     M0, M1 = S.broadcast(U, V, axes=(1, 0))
     return Q0 @ M0, M1 @ Q1
@@ -769,6 +845,7 @@ def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
     return abs(vdot(delta, fgf @ delta).item()) / RRgRR
 
 
+@nsys_profile()
 def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     """
     Truncate R0 @ R1 to bond dimension specified in opts_svd
@@ -817,6 +894,7 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     return (M0, M1), error2, pinv_c, eat_metric_error
 
 
+@nsys_profile()
 def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter):
     r"""
     Optimizes the matrices M0 and M1 by minimizing
@@ -824,6 +902,7 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
     """
     gf = fgf.unfuse_legs(axes=0)
     gRR = fgRR.unfuse_legs(axes=0)
+    error2, pinv_c = error2_old, min(pinv_cutoffs)
 
     for iter in range(1, max_iter+1):
         # fix M1 and optimize M0
@@ -832,7 +911,14 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
         g0 = g0.unfuse_legs(axes=1)
         g0 = tensordot(g0, M1, axes=(2, 1)).fuse_legs(axes=(0, (1, 2)))
         error_fun = lambda x: calculate_truncation_error2(x @ M1, fgf, fRR, RRgRR)
-        M0, error2, pinv_c = optimal_pinv(g0, j0, pinv_cutoffs, error_fun)
+        try:
+            candidate, candidate_error2, candidate_cutoff = optimal_pinv(g0, j0, pinv_cutoffs, error_fun)
+        except _NoPositiveMetricSupport:
+            break
+        if (not np.isfinite(candidate_error2) or candidate_error2 > error2
+                or candidate.norm(p='inf').item() <= 0):
+            break
+        M0, error2, pinv_c = candidate, candidate_error2, candidate_cutoff
 
         # fix M0 and optimize M1
         j1 = (M0.H @ gRR).fuse_legs(axes=[(0, 1)])
@@ -840,7 +926,14 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
         g1 = g1.unfuse_legs(axes=1)
         g1 = tensordot(g1, M0, axes=(1, 0)).fuse_legs(axes=(0, (2, 1)))
         error_fun = lambda x: calculate_truncation_error2(M0 @ x, fgf, fRR, RRgRR)
-        M1, error2, pinv_c = optimal_pinv(g1, j1, pinv_cutoffs, error_fun)
+        try:
+            candidate, candidate_error2, candidate_cutoff = optimal_pinv(g1, j1, pinv_cutoffs, error_fun)
+        except _NoPositiveMetricSupport:
+            break
+        if (not np.isfinite(candidate_error2) or candidate_error2 > error2
+                or candidate.norm(p='inf').item() <= 0):
+            break
+        M1, error2, pinv_c = candidate, candidate_error2, candidate_cutoff
 
         # convergence condition
         if abs(error2 - error2_old) < tol_iter:
@@ -850,14 +943,23 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
     return (M0, M1), error2, pinv_c, iter
 
 
+@nsys_profile()
 def optimal_pinv(g, j, pinv_cutoffs, error_fun):
     r"""
     M = pinv(g) * j, where pinv cutoff is optimized based on error_fun.
     """
+    # A common scalar cancels from g M = j. Max-element scaling remains
+    # finite for metrics whose squared Frobenius norm under/overflows.
+    scale = g.norm(p='inf').item()
+    g = _normalize_metric(g, "Optimization normal metric")
+    j = _divide_metric_scale(j, scale)
+    g = (g + g.H) / 2
     S, U = g.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    if len(S._data) == 0:
+        raise _NoPositiveMetricSupport("Optimization normal metric has no positive eigenvalue support.")
     smax = S._data.max().item()
     UHJ = U.H @ j
-    error2, values_old = 100, len(S._data) + 1
+    error2, values_old = float('inf'), len(S._data) + 1
     for cutoff in pinv_cutoffs:
         values = (S._data > cutoff * smax).sum().item()
         if values < values_old:
@@ -866,6 +968,8 @@ def optimal_pinv(g, j, pinv_cutoffs, error_fun):
             SrUHJ = Sr.broadcast(UHJ, axes=0)
             M_tmp = (U @ SrUHJ).unfuse_legs(axes=0)
             error2_tmp = error_fun(M_tmp)
-            if error2_tmp < error2:
+            if np.isfinite(error2_tmp) and error2_tmp < error2:
                 M_new, error2, pinv_c = M_tmp, error2_tmp, cutoff
+    if not np.isfinite(error2):
+        raise _NoPositiveMetricSupport("Optimization pseudo-inverse produced no finite supported candidate.")
     return M_new, error2, pinv_c

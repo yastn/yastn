@@ -23,6 +23,8 @@ from warnings import warn
 
 import numpy as np
 
+from .._profile import nsys_profile
+
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t
 from ._auxiliary import convert_to_tuples_and_slices, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
@@ -53,6 +55,7 @@ def norm(a, p='fro') -> Number:
     return a.config.backend.norm(a._data, p)
 
 
+@nsys_profile
 def svd_with_truncation(a, axes=(0, 1),
                         sU=1,
                         nU=True,
@@ -160,6 +163,7 @@ def svd_with_truncation(a, axes=(0, 1),
     return U, S, V
 
 
+@nsys_profile
 def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
         fix_signs=False, svd_on_cpu=False, thresh=0.1, **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor'] | 'Tensor':
@@ -717,6 +721,7 @@ def truncation_mask(S, which='LR',
     return Smask
 
 
+@nsys_profile
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     r"""
     Split a tensor using a reduced QR decomposition such that :math:`a = Q R`,
@@ -804,6 +809,7 @@ def _meta_qr(sym, struct, sQ):
     return meta, sizes, struct_Q, struct_R
 
 
+@nsys_profile
 def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tuple['Tensor', 'Tensor']:
     r"""
     Split a symmetric tensor using an exact eigenvalue decomposition, :math:`a = U S U^\dagger`.
@@ -977,6 +983,7 @@ def _meta_eigh(sym, struct, sU, k_block):
     return meta, sizes, struct_U, struct_S
 
 
+@nsys_profile
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
                          largest_gap=False, mask_f=None, **kwargs) -> tuple['Tensor', 'Tensor']:
