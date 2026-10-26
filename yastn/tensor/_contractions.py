@@ -125,7 +125,9 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
 
     if active_flop_tracer() is not None:  # tracing forces the metadata GEMM-decomposition path
         data, struct_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
-    elif a.config.backend.BACKEND_ID == 'torch_cutensor' and all(0 < x < 33 for x in (a.ndim_n, b.ndim_n)) and len(hfs_c)<33:
+    elif (a.config.backend.BACKEND_ID == 'torch_cutensor'
+          and all(0 < x < 33 for x in (a.ndim_n, b.ndim_n)) and len(hfs_c) < 33
+          and (a.config.sym.NSYM == 0 or a.config.backend.supports_block_sparse(a.device))):
         data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)

@@ -26,6 +26,16 @@ BACKEND_ID = "torch_cutensor"
 from tapp_torch.ops import descriptor_cache_stats, plan_cache_stats
 
 
+def supports_block_sparse(device):
+    """Check for the compiled kernel, rather than its Python wrapper."""
+    dispatch_key = "CUDA" if torch.device(device).type == "cuda" else "CPU"
+    try:
+        return torch._C._dispatch_has_kernel_for_dispatch_key(
+            "tapp_torch::tensor_product_bs_v2", dispatch_key)
+    except RuntimeError:
+        return False
+
+
 def tensordot_bs(Adata, Bdata, *args):
     dtype = torch.promote_types(Bdata.dtype, Adata.dtype)
     if Adata.dtype != dtype:
@@ -82,7 +92,7 @@ def tensordot_bs_v2(
     # b_blocks: Tensor, b_strides: Tensor, b_offsets: Tensor,
     # c_numSectionsPerMode: List[int], c_sectionExtents: List[int],
     # c_blocks: Tensor, c_strides: Tensor, c_offsets: Tensor,
-    # modes_out: Optional[List[int]] = None, key_flags: int = 0
+    # modes_out: Optional[List[int]] = None
     #
     # with all but A,B Tensor arguments being CPU Tensors of int64
     #
@@ -90,5 +100,5 @@ def tensordot_bs_v2(
         a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
         b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets,
-        modes_out, hashes_int64)
+        modes_out)
     return res
