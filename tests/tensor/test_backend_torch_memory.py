@@ -101,8 +101,12 @@ def test_fusion_uses_scaled_merge(sym, kind, monkeypatch, request):
         return _fuse_blocks(config, a.data, a.struct, ((0, 1), (2, 3)))[0]
 
     merged = backend_torch.transpose_and_merge_scaled
+    recoupled = backend_torch.recouple_and_merge
+    fused = backend_torch.recouple_and_fuse
     with monkeypatch.context() as reference_patch:
         reference_patch.setattr(backend_torch, 'transpose_and_merge_scaled', None)
+        reference_patch.setattr(backend_torch, 'recouple_and_merge', None)
+        reference_patch.setattr(backend_torch, 'recouple_and_fuse', None)
         reference = operation()
     calls = []
 
@@ -113,7 +117,19 @@ def test_fusion_uses_scaled_merge(sym, kind, monkeypatch, request):
     def forbidden(*args, **kwargs):
         raise AssertionError('Hard fusion must not create a scaled source buffer')
 
+    def recoupled_probe(*args, **kwargs):
+        calls.append(len(args[2]))
+        return recoupled(*args, **kwargs)
+
+    def fused_probe(*args, **kwargs):
+        result = fused(*args, **kwargs)
+        if result is not None:
+            calls.append(len(args[2]))
+        return result
+
     monkeypatch.setattr(backend_torch, 'transpose_and_merge_scaled', probe)
+    monkeypatch.setattr(backend_torch, 'recouple_and_merge', recoupled_probe)
+    monkeypatch.setattr(backend_torch, 'recouple_and_fuse', fused_probe)
     monkeypatch.setattr(backend_torch, 'scale_blocks', forbidden)
     actual = operation()
     assert calls and all(count > 0 for count in calls)

@@ -1,5 +1,6 @@
 """Streaming retains cross terms and the existing NN/NNN update."""
 import pytest
+import weakref
 import yastn
 from yastn.tn import fpeps
 from yastn.tn.fpeps._evolution import symmetrized_svd
@@ -9,6 +10,73 @@ from yastn.tn.fpeps._evolution import symmetrized_svd
 pytestmark = pytest.mark.skipif(
     "not config.getoption('long_tests')",
     reason="long duration tests are skipped; pass --long_tests to run them")
+
+
+@pytest.mark.parametrize('operation', ['blocks', 'matmul', 'eat0', 'eat1', 'normal0', 'normal1'])
+def test_streamed_temporaries_released(config_kwargs, operation, monkeypatch):
+    torch = pytest.importorskip('torch')
+    config_kwargs = {**config_kwargs, 'backend': 'torch'}
+    psi, _ = _state(config_kwargs, 'SU2')
+    Q0, Q1, R0, R1, s0, s1, dirn = _qr(psi, False)
+    metric = fpeps.EnvNTU(psi, metric_chunk_size=1).bond_metric(Q0, Q1, s0, s1, dirn).g
+    assert len(metric.projectors) > 1
+    (M0, M1), _ = symmetrized_svd(R0, R1, {'D_total': 2})
+    x = (R0 @ R1).fuse_legs([(0, 1)])
+    left = yastn.eye(Q0.config, legs=Q0.get_legs(3).conj(), isdiag=False)
+    right = yastn.eye(Q1.config, legs=Q1.get_legs(1), isdiag=False)
+
+    def run():
+        if operation == 'matmul':
+            return (metric @ x).norm().item()
+        if operation.startswith('eat'):
+            side = int(operation[-1])
+            return metric._eat_action(right if side == 0 else left, side).norm().item()
+        if operation.startswith('normal'):
+            side = int(operation[-1])
+            return metric.normal_matrix(M1 if side == 0 else M0, side).norm().item()
+        norm = 0.
+        for _, _, block in metric.blocks():
+            norm += block.norm().item()
+            del block
+        return norm
+
+    with torch.no_grad():
+        expected = run()
+    refs, checks = [], []
+    inside_raw = False
+    raw_block, blocks, unfuse = metric._raw_block, metric.blocks, yastn.Tensor.unfuse_legs
+
+    def checked_raw(row, col):
+        nonlocal inside_raw
+        if refs:
+            assert all(ref() is None for ref in refs), 'Previous metric block or unfuse output is still live'
+            checks.append(len(refs))
+            refs.clear()
+        inside_raw = True
+        try:
+            return raw_block(row, col)
+        finally:
+            inside_raw = False
+
+    def tracked_blocks():
+        for row, col, block in blocks():
+            refs.append(weakref.ref(block.data))
+            yield row, col, block
+            del block
+
+    def tracked_unfuse(tensor, axes):
+        result = unfuse(tensor, axes)
+        if not inside_raw and tensor.ndim == 2:
+            refs.append(weakref.ref(result.data))
+        return result
+
+    monkeypatch.setattr(metric, '_raw_block', checked_raw)
+    monkeypatch.setattr(metric, 'blocks', tracked_blocks)
+    monkeypatch.setattr(yastn.Tensor, 'unfuse_legs', tracked_unfuse)
+    with torch.no_grad():
+        actual = run()
+    assert checks and all(count > 0 for count in checks)
+    assert actual > 0 and actual == pytest.approx(expected, rel=1e-12)
 
 
 def _state(config_kwargs, sym, prepare=False):

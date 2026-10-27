@@ -36,6 +36,10 @@ if TYPE_CHECKING:
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion']
 
+# Small tensors benefit from the existing batched recoupling/index kernels.
+# Use direct block writes once full intermediates become material allocations.
+_NONABELIAN_FUSION_MIN_SIZE = 1 << 20
+
 
 class _LegSlices(NamedTuple):
     r"""Immutable structure describing how to decompose a leg."""
@@ -236,17 +240,27 @@ def _fuse_legs_hard(a, axes, order):
 
 
 def _fuse_disjoint_nonabelian_groups(a, axes):
-    """Build several sibling hard-fusion subtrees one at a time.
+    """Build sibling hard-fusion subtrees, composing large-tensor operations.
 
     A canonical left-associated flat channel can expose only one requested
     subtree at a time.  Sequentially moving every group to the prefix and
     hard-fusing it stores that subtree's outgoing irrep in its effective leg,
     so no channel information is discarded when the next group is built.
+    The composed path plans these operations without intermediate data.
     """
+    fused_kernel = (getattr(a.config.backend, 'recouple_and_merge', None) is not None
+                    and a.size >= _NONABELIAN_FUSION_MIN_SIZE)
+    if sum(len(group) > 1 for group in axes) == 1 and fused_kernel:
+        return _fuse_single_nonabelian_group(a, axes)
+    if fused_kernel and getattr(a.config.backend, 'recouple_and_fuse', None) is not None:
+        result = _fuse_nonabelian_groups_streamed(a, axes)
+        if result is not None:
+            return result
     a = a._replace(trans=tuple(range(a.ndim_n)))
     tokens = [frozenset((i,)) for i in range(a.ndim_n)]
     desired = [frozenset(group) for group in axes]
-    for ordered_group, group in zip(axes, desired):
+    last_group = max(i for i, group in enumerate(axes) if len(group) > 1)
+    for group_index, (ordered_group, group) in enumerate(zip(axes, desired)):
         if len(group) < 2:
             continue
         positions = [i for i, token in enumerate(tokens) if token <= group]
@@ -256,6 +270,16 @@ def _fuse_disjoint_nonabelian_groups(a, axes):
         # Membership alone would silently replace (1, 0) with (0, 1).
         positions.sort(key=lambda i: min(ordered_group.index(leaf) for leaf in tokens[i]))
         permutation = tuple(positions + [i for i in range(len(tokens)) if i not in positions])
+        if fused_kernel:
+            k = len(positions)
+            one_group = (tuple(positions),) + tuple((i,) for i in permutation[k:])
+            tokens = [group] + [tokens[i] for i in permutation[k:]]
+            if group_index == last_group:
+                final_order = tuple(tokens.index(wanted) for wanted in desired)
+                one_group = tuple(one_group[i] for i in final_order)
+                tokens = [tokens[i] for i in final_order]
+            a = _fuse_single_nonabelian_group(a, one_group)
+            continue
         if permutation != tuple(range(len(tokens))):
             a = _apply_fusion_tree_transpose(a, permutation)
             tokens = [tokens[i] for i in permutation]
@@ -268,6 +292,95 @@ def _fuse_disjoint_nonabelian_groups(a, axes):
     if final_order != tuple(range(len(tokens))):
         a = _apply_fusion_tree_transpose(a, final_order)
     return a
+
+
+def _fuse_nonabelian_groups_streamed(a, axes):
+    """Plan several prefix merges and execute their adjoint with source views."""
+    from ._nonabelian import fusion_weights
+    from ..backend._recoupling import adjoint_recoupling_steps
+    struct, hfs, steps = a.struct, a.hfs, []
+    tokens = [frozenset((i,)) for i in range(a.ndim_n)]
+    desired = [frozenset(group) for group in axes]
+    for ordered_group, group in zip(axes, desired):
+        if len(group) < 2:
+            continue
+        positions = [i for i, token in enumerate(tokens) if token <= group]
+        positions.sort(key=lambda i: min(ordered_group.index(leaf) for leaf in tokens[i]))
+        permutation = tuple(positions + [i for i in range(len(tokens)) if i not in positions])
+        if permutation != tuple(range(len(tokens))):
+            plans = _meta_fusion_tree_transpose(a.config.sym, struct, permutation)
+            steps.extend(('recouple', plan[1], plan[2]) for plan in plans)
+            struct = plans[-1][0]
+            hfs = tuple(hfs[i] for i in permutation)
+        k = len(positions)
+        prefix = (tuple(range(k)),) + tuple((i,) for i in range(k, len(tokens)))
+        meta, _, fused, legs_old = _meta_fuse_hard(a.config.sym, struct, prefix)
+        weights, lengths = fusion_weights(a.config.sym, struct, fused, prefix, meta)
+        source_weights, start = {}, 0
+        for weight, length in zip(weights, lengths):
+            source_weights[start] = float(weight)
+            start += int(length)
+        # Transpose the merge, retaining its weights (not reciprocal weights).
+        records = tuple((source.start, destination.start, merged_shape, old_shape,
+                         tuple(sl.start for sl in subslices), source_weights[source.start])
+                        for destination, merged_shape, source, old_shape, subslices, _ in meta)
+        steps.append(('unmerge', k, records))
+        hfs = tuple(_combine_hfs_prod(tuple(hfs[i] for i in axs),
+                                      tuple(leg.basic() for leg in legs))
+                    for axs, legs in zip(prefix, legs_old))
+        struct = fused
+        tokens = [group] + [tokens[i] for i in permutation[k:]]
+    final_order = tuple(tokens.index(group) for group in desired)
+    if final_order != tuple(range(len(tokens))):
+        plans = _meta_fusion_tree_transpose(a.config.sym, struct, final_order)
+        steps.extend(('recouple', plan[1], plan[2]) for plan in plans)
+        struct = plans[-1][0]
+        hfs = tuple(hfs[i] for i in final_order)
+    adjoint = []
+    for kind, parameter, records in reversed(steps):
+        if kind == 'recouple':
+            parameter, records = adjoint_recoupling_steps(((parameter, records),))[0]
+        adjoint.append((kind, parameter, records))
+    blocks = get_blocks(a.config.sym, a.struct)
+    inputs = tuple((int(start), tuple(map(int, shape))) for (start, _), shape in zip(blocks.slc, blocks.D))
+    size = get_blocks(a.config.sym, struct).size
+    data = a.config.backend.recouple_and_fuse(a._data, tuple(adjoint), inputs, size)
+    if data is None:
+        return None
+    return a._replace(struct=struct, data=data, trans=None, hfs=hfs, mfs=((1,),) * len(axes))
+
+
+def _fuse_single_nonabelian_group(a, axes):
+    """Plan the prefix fusion and both permutations before allocating data.
+
+    In particular, append_vec_br fuses (2, (0, 3), 1). Materializing its
+    prefix permutation, merge, and final permutation separately keeps three
+    full buffers alive because the caller still owns the original tensor.
+    """
+    from ._nonabelian import fusion_weights
+    group = next(group for group in axes if len(group) > 1)
+    order = group + tuple(i for i in range(a.ndim_n) if i not in group)
+    before = (_meta_fusion_tree_transpose(a.config.sym, a.struct, order)
+              if order != tuple(range(a.ndim_n)) else ())
+    struct = before[-1][0] if before else a.struct
+    prefix = (tuple(range(len(group))),) + tuple((i,) for i in range(len(group), a.ndim_n))
+    meta, size, fused, legs_old = _meta_fuse_hard(a.config.sym, struct, prefix)
+    weights, lengths = fusion_weights(a.config.sym, struct, fused, prefix, meta)
+    hfs_old = tuple(a.hfs[i] for i in order)
+    hfs = tuple(_combine_hfs_prod(tuple(hfs_old[i] for i in axs),
+                                  tuple(leg.basic() for leg in legs))
+                for axs, legs in zip(prefix, legs_old))
+    tokens = [frozenset(group)] + [frozenset((i,)) for i in order[len(group):]]
+    final_order = tuple(tokens.index(frozenset(axs)) for axs in axes)
+    after = (_meta_fusion_tree_transpose(a.config.sym, fused, final_order)
+             if final_order != tuple(range(len(axes))) else ())
+    if after:
+        fused, size = after[-1][0], after[-1][3]
+    data = a.config.backend.recouple_and_merge(
+        a._data, tuple((plan[1], plan[2]) for plan in before), meta,
+        tuple((plan[1], plan[2]) for plan in after), size, tuple(weights), tuple(lengths))
+    return a._replace(struct=fused, data=data, trans=None, mfs=((1,),) * len(axes),
+                      hfs=tuple(hfs[i] for i in final_order))
 
 
 def _has_nontrivial_irreps(a):
@@ -894,6 +1007,13 @@ def unfuse_legs(a, axes) -> 'Tensor':
         hard_axes = tuple(ax for ax in axes
                           if a.mfs[ax][0] == 1
                           and a.hfs[a.trans[ax]].tree[0] > 1)
+        if (len(hard_axes) > 1 and len(set(axes)) == len(axes)
+                and a.trans == tuple(range(a.ndim_n)) and all(mf == (1,) for mf in a.mfs)
+                and a.size >= _NONABELIAN_FUSION_MIN_SIZE
+                and getattr(a.config.backend, 'recouple_and_unfuse', None) is not None):
+            result = _unfuse_nonabelian_axes_streamed(a, tuple(sorted(hard_axes, reverse=True)))
+            if result is not None:
+                return result
         if hard_axes and (len(hard_axes) > 1 or hard_axes[0] != 0):
             for ax in sorted(hard_axes, reverse=True):
                 a = _unfuse_nonabelian_axis(a, ax)
@@ -947,10 +1067,59 @@ def unfuse_legs(a, axes) -> 'Tensor':
     return out
 
 
+def _unfuse_nonabelian_axes_streamed(a, axes):
+    """Plan all unfusions before allocating a single final output buffer."""
+    from ._nonabelian import fusion_weights
+    struct, hfs, steps = a.struct, a.hfs, []
+    for axis in axes:
+        ndim = len(struct.legs)
+        permutation = (axis,) + tuple(i for i in range(ndim) if i != axis)
+        if axis:
+            before = _meta_fusion_tree_transpose(a.config.sym, struct, permutation)
+            steps.extend(('recouple', plan[1], plan[2]) for plan in before)
+            struct = before[-1][0]
+            hfs = tuple(hfs[i] for i in permutation)
+        meta, _, expanded, nlegs, hfs = _meta_unfuse_hard(a.config.sym, struct, (0,), hfs)
+        nleaves = nlegs[0]
+        groups = (tuple(range(nleaves)),) + tuple((i,) for i in range(nleaves, len(expanded.legs)))
+        reverse_meta = tuple((m[2], m[3], m[0], (), m[4], ()) for m in meta)
+        weights, lengths = fusion_weights(a.config.sym, expanded, struct, groups, reverse_meta)
+        blocks = get_blocks(a.config.sym, expanded)
+        shapes = {int(start): tuple(map(int, shape)) for (start, _), shape in zip(blocks.slc, blocks.D)}
+        inverse_weights = {}
+        start = 0
+        for weight, length in zip(weights, lengths):
+            inverse_weights[start] = float(1. / weight)
+            start += int(length)
+        records = tuple((sln.start, slo.start, Do, shapes[sln.start],
+                         tuple(sl.start for sl in subslices), inverse_weights[sln.start])
+                        for sln, _, slo, Do, subslices in meta)
+        steps.append(('unmerge', nleaves, records))
+        struct = expanded
+        if axis:
+            restore = (tuple(range(nleaves, nleaves + axis)) + tuple(range(nleaves))
+                       + tuple(range(nleaves + axis, len(expanded.legs))))
+            after = _meta_fusion_tree_transpose(a.config.sym, struct, restore)
+            steps.extend(('recouple', plan[1], plan[2]) for plan in after)
+            struct = after[-1][0]
+            hfs = tuple(hfs[i] for i in restore)
+    blocks = get_blocks(a.config.sym, struct)
+    outputs = tuple((int(start), tuple(map(int, shape))) for (start, _), shape in zip(blocks.slc, blocks.D))
+    data = a.config.backend.recouple_and_unfuse(a._data, tuple(steps), outputs, blocks.size)
+    if data is None:
+        return None
+    return a._replace(struct=struct, data=data, trans=None, hfs=hfs,
+                      mfs=((1,),) * len(struct.legs))
+
+
 def _unfuse_nonabelian_axis(a, axis):
     """Expose one hard-fused subtree at the prefix, unfuse, and restore order."""
     if axis == 0:
         return unfuse_legs(a, 0)
+    if (getattr(a.config.backend, 'recouple_and_merge', None) is not None
+            and a.size >= _NONABELIAN_FUSION_MIN_SIZE
+            and a.trans == tuple(range(a.ndim_n)) and all(mf == (1,) for mf in a.mfs)):
+        return _unfuse_nonabelian_axis_streamed(a, axis)
     ndim = a.ndim
     permutation = (axis,) + tuple(i for i in range(ndim) if i != axis)
     b = _apply_fusion_tree_transpose(a, permutation)
@@ -965,12 +1134,52 @@ def _unfuse_nonabelian_axis(a, axis):
     return _apply_fusion_tree_transpose(b, restore)
 
 
+def _unfuse_nonabelian_axis_streamed(a, axis):
+    """Unmerge between two basis changes with no full recoupling buffers."""
+    from ._nonabelian import fusion_weights
+    ndim = a.ndim_n
+    permutation = (axis,) + tuple(i for i in range(ndim) if i != axis)
+    before = _meta_fusion_tree_transpose(a.config.sym, a.struct, permutation)
+    struct = before[-1][0]
+    permuted_hfs = tuple(a.hfs[i] for i in permutation)
+    meta, size, expanded, nlegs, hfs = _meta_unfuse_hard(a.config.sym, struct, (0,), permuted_hfs)
+    nleaves = nlegs[0]
+    groups = (tuple(range(nleaves)),) + tuple((i,) for i in range(nleaves, len(expanded.legs)))
+    blocks = get_blocks(a.config.sym, expanded)
+    shapes = {start: tuple(shape) for (start, _), shape in zip(blocks.slc, blocks.D)}
+    reverse_meta = tuple((slo, Do, sln, shapes[sln.start], subslices, ())
+                         for sln, _, slo, Do, subslices in meta)
+    weights, lengths = fusion_weights(a.config.sym, expanded, struct, groups, reverse_meta)
+    restore = (tuple(range(nleaves, nleaves + axis)) + tuple(range(nleaves))
+               + tuple(range(nleaves + axis, len(expanded.legs))))
+    after = _meta_fusion_tree_transpose(a.config.sym, expanded, restore)
+    final_struct, size = after[-1][0], after[-1][3]
+    data = a.config.backend.recouple_and_merge(
+        a._data, tuple((plan[1], plan[2]) for plan in before), reverse_meta,
+        tuple((plan[1], plan[2]) for plan in after), size,
+        tuple(1. / weight for weight in weights), tuple(lengths), adjoint=True)
+    return a._replace(struct=final_struct, data=data, trans=None,
+                      mfs=((1,),) * len(expanded.legs), hfs=tuple(hfs[i] for i in restore))
+
+
 @nsys_profile
 def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_threshold=None):
     axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
     if axes_trim:
         old_struct = struct
         meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm, lazy_threshold)
+        if (not getattr(config.sym, 'IS_ABELIAN', True)
+                and getattr(config.backend, 'recouple_and_merge', None) is not None
+                and size >= _NONABELIAN_FUSION_MIN_SIZE):
+            from ._nonabelian import fusion_weights
+            counts = dict(zip(axes_trim, nlegs))
+            starts = np.cumsum((0,) + tuple(counts.get(i, 1) for i in range(len(old_struct.legs))))
+            groups = tuple(tuple(range(starts[i], starts[i+1])) for i in range(len(old_struct.legs)))
+            reverse_meta = tuple((m[2], m[3], m[0], m[1], m[4], ()) for m in meta)
+            weights, lengths = fusion_weights(config.sym, struct, old_struct, groups, reverse_meta)
+            data = config.backend.recouple_and_merge(data, (), reverse_meta, (), size,
+                tuple(1. / weight for weight in weights), tuple(lengths), adjoint=True)
+            return (data, struct, nlegs, hfs) if return_hfs else (data, struct)
         data = config.backend.unmerge(data, meta, size)
         if not getattr(config.sym, 'IS_ABELIAN', True):
             from ._nonabelian import fusion_scale_inplace

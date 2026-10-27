@@ -17,6 +17,7 @@ from types import SimpleNamespace
 from collections import OrderedDict
 from typing import Sequence
 from functools import lru_cache
+from math import prod
 import numpy as np
 import torch
 
@@ -127,12 +128,17 @@ class kernel_svds_scipy(torch.autograd.Function):
 
 
 class _MatrixBlocks:
-    """Lazily permute/promote blocks with a bounded cache of materialized data."""
+    """Lazily recouple/permute/promote blocks with a bounded data cache.
+
+    A block larger than the cache budget is materialized without caching;
+    the budget does not bound the workspace for a single block.
+    """
 
     max_bytes = 8 << 20
 
-    def __init__(self, data, reshape, order, dtype):
+    def __init__(self, data, reshape, order, dtype, recoupling=None):
         self.data, self.reshape, self.order, self.dtype = data, reshape, order, dtype
+        self.recoupling = recoupling
         self.cache = OrderedDict()
         self.nbytes = 0
         self.element_size = torch.empty((), dtype=dtype).element_size()
@@ -148,7 +154,15 @@ class _MatrixBlocks:
             _, old = self.cache.popitem(last=False)
             self.nbytes -= old.numel() * old.element_size()
             del old
-        block = self.data[sl].view(shape).permute(self.order).reshape(rows, cols).to(self.dtype)
+        if self.recoupling is None:
+            block = self.data[sl].view(shape).permute(self.order).reshape(rows, cols).to(self.dtype)
+        else:
+            from ._recoupling import composed_recoupling_terms
+            block = torch.zeros((rows, cols), dtype=self.dtype, device=self.data.device)
+            target = block.view(tuple(shape[i] for i in self.order)).permute(tuple(np.argsort(self.order)))
+            for source, old_shape, coefficient in composed_recoupling_terms(self.recoupling, sl.start):
+                values = self.data[source:source + prod(old_shape)].view(old_shape).permute(self.recoupling[0])
+                target.add_(values, alpha=coefficient)
         if size <= self.max_bytes:
             self.cache[index] = block
             self.nbytes += size
@@ -164,19 +178,21 @@ def _save_contraction_inputs(ctx, data_A, data_B):
 
 
 def _transpose_dot_gradient(gradient, other, meta, reshape, other_reshape,
-                            order, other_order, input_spec, dtype, side):
+                            order, other_order, input_spec, dtype, side,
+                            recoupling=None, other_recoupling=None):
     """Accumulate one input block at a time, then write its original layout."""
     size, target_dtype = input_spec
-    allocate = torch.empty if _blocks_tile(reshape, size) else torch.zeros
-    result = allocate(size, dtype=target_dtype, device=gradient.device)
-    blocks = _MatrixBlocks(other, other_reshape, other_order, dtype)
+    allocate = torch.empty if recoupling is None and _blocks_tile(reshape, size) else torch.zeros
+    result = allocate(size, dtype=target_dtype if recoupling is None else dtype, device=gradient.device)
+    blocks = _MatrixBlocks(other, other_reshape, other_order, dtype, other_recoupling)
     records = [[] for _ in reshape]
     for record in meta:
         records[record[2 + side]].append(record)
     inverse_order = tuple(np.argsort(order))
     for (sl, shape, rows, cols), terms in zip(reshape, records):
         if not terms:
-            result[sl] = 0
+            if recoupling is None:
+                result[sl] = 0
             continue
         acc = torch.zeros((rows, cols), dtype=dtype, device=gradient.device)
         for record in terms:
@@ -189,10 +205,16 @@ def _transpose_dot_gradient(gradient, other, meta, reshape, other_reshape,
                 acc.addmm_(blocks[ta].adjoint(), Cb, alpha=coefficient)
             del Cb
         permuted_shape = tuple(shape[n] for n in order)
-        result[sl].view(shape).copy_(
-            _project_grad_dtype(acc.reshape(permuted_shape).permute(inverse_order), target_dtype))
-        del acc
-    return result
+        values = acc.reshape(permuted_shape).permute(inverse_order)
+        if recoupling is None:
+            result[sl].view(shape).copy_(_project_grad_dtype(values, target_dtype))
+        else:
+            from ._recoupling import composed_recoupling_terms
+            for source, old_shape, coefficient in composed_recoupling_terms(recoupling, sl.start):
+                target = result[source:source + prod(old_shape)].view(old_shape).permute(recoupling[0])
+                target.add_(values, alpha=coefficient)
+        del acc, values
+    return _project_grad_dtype(result, target_dtype)
 
 
 class kernel_dot(torch.autograd.Function):
@@ -247,11 +269,12 @@ class kernel_dot(torch.autograd.Function):
 
 class kernel_transpose_dot_sum(torch.autograd.Function):
     @staticmethod
-    def forward(data_A, data_B, meta, reshape_A, reshape_B, order_A, order_B, size_C):
+    def forward(data_A, data_B, meta, reshape_A, reshape_B, order_A, order_B, size_C,
+                recoupling_A=None, recoupling_B=None):
         dtype = torch.promote_types(data_A.dtype, data_B.dtype)
         data_C = torch.zeros((size_C,), dtype=dtype, device=data_A.device)
-        At = _MatrixBlocks(data_A, reshape_A, order_A, dtype)
-        Bt = _MatrixBlocks(data_B, reshape_B, order_B, dtype)
+        At = _MatrixBlocks(data_A, reshape_A, order_A, dtype, recoupling_A)
+        Bt = _MatrixBlocks(data_B, reshape_B, order_B, dtype, recoupling_B)
         for record in meta:
             sln, Dn, ta, tb = record[:4]
             coef = record[4] if len(record) > 4 else 1
@@ -262,13 +285,15 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
 
     @staticmethod
     def setup_context(ctx, inputs, output):
-        data_A, data_B, meta, reshape_A, reshape_B, order_A, order_B, _ = inputs
+        data_A, data_B, meta, reshape_A, reshape_B, order_A, order_B, _, *recoupling = inputs
         _save_contraction_inputs(ctx, data_A, data_B)
         ctx.meta = meta
         ctx.reshape_A = reshape_A
         ctx.reshape_B = reshape_B
         ctx.order_A = order_A
         ctx.order_B = order_B
+        ctx.extra_inputs = len(recoupling)
+        ctx.recoupling_A, ctx.recoupling_B = recoupling if recoupling else (None, None)
 
     @staticmethod
     def backward(ctx, data_C_b):
@@ -277,12 +302,14 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         if ctx.needs_input_grad[0]:
             data_A_b = _transpose_dot_gradient(
                 data_C_b, data_B, ctx.meta, ctx.reshape_A, ctx.reshape_B,
-                ctx.order_A, ctx.order_B, ctx.input_specs[0], ctx.promoted_dtype, 0)
+                ctx.order_A, ctx.order_B, ctx.input_specs[0], ctx.promoted_dtype, 0,
+                ctx.recoupling_A, ctx.recoupling_B)
         if ctx.needs_input_grad[1]:
             data_B_b = _transpose_dot_gradient(
                 data_C_b, data_A, ctx.meta, ctx.reshape_B, ctx.reshape_A,
-                ctx.order_B, ctx.order_A, ctx.input_specs[1], ctx.promoted_dtype, 1)
-        return data_A_b, data_B_b, None, None, None, None, None, None
+                ctx.order_B, ctx.order_A, ctx.input_specs[1], ctx.promoted_dtype, 1,
+                ctx.recoupling_B, ctx.recoupling_A)
+        return (data_A_b, data_B_b, None, None, None, None, None, None) + (None,) * ctx.extra_inputs
 
 
 class kernel_negate_blocks(torch.autograd.Function):

@@ -62,6 +62,8 @@ class NTUMetric:
             yield row, col, block
             if i != j:
                 yield col, row, block.H
+            # Do not retain the previous block while contracting the next one.
+            del block
         if measure:
             if norm2 == 0:
                 raise YastnError('NTU metric has zero norm.')
@@ -80,14 +82,17 @@ class NTUMetric:
         for row, col, block in self.blocks():
             # Materialize the adjoint block's pending permutation before
             # exposing both non-Abelian fusion trees.
-            G = block.consume_transpose().unfuse_legs(axes=(0, 1))
+            G = block.consume_transpose()
+            G = G.unfuse_legs(axes=(0, 1))
             if side == 0:
                 value = tensordot(G, matrix, axes=((1, 3), (1, 0)), conj=(0, 1))
                 value = row @ value @ col.H
             else:
                 selected = row.H @ matrix @ col
                 value = tensordot(selected, G, axes=((0, 1), (0, 2)), conj=(1, 0)).T
+                del selected
             result = value if result is None else result + value
+            del G, block, value
         return result
 
     def eat_factors(self):
@@ -134,6 +139,7 @@ class NTUMetric:
             selected = (col.H @ matrix).fuse_legs(axes=[(0, 1)])
             value = row @ (block @ selected).unfuse_legs(axes=0)
             result = value if result is None else result + value
+            del block, selected, value
         return result.fuse_legs(axes=[(0, 1)])
 
     def normal_matrix(self, M, side):
@@ -143,8 +149,10 @@ class NTUMetric:
             gf = block.unfuse_legs(axes=0)
             if side == 0:
                 g = tensordot(M.conj(), gf, axes=(1, 1))
-                g = g.fuse_legs(axes=((1, 0), 2)).unfuse_legs(axes=1)
-                g = tensordot(g, M, axes=(2, 1)).unfuse_legs(axes=0)
+                g = g.fuse_legs(axes=((1, 0), 2))
+                g = g.unfuse_legs(axes=1)
+                g = tensordot(g, M, axes=(2, 1))
+                g = g.unfuse_legs(axes=0)
                 # g: row_left, row_bond, col_left, col_bond
                 g = tensordot(row, g, axes=(1, 0))
                 g = tensordot(g, col.conj(), axes=(2, 1))
@@ -152,7 +160,11 @@ class NTUMetric:
             else:
                 mr, mc = row.H @ M, col.H @ M
                 g = tensordot(mr.conj(), gf, axes=(0, 0))
-                g = g.fuse_legs(axes=((0, 1), 2)).unfuse_legs(axes=1)
-                g = tensordot(g, mc, axes=(1, 0)).fuse_legs(axes=(0, (2, 1)))
+                g = g.fuse_legs(axes=((0, 1), 2))
+                g = g.unfuse_legs(axes=1)
+                g = tensordot(g, mc, axes=(1, 0))
+                g = g.fuse_legs(axes=(0, (2, 1)))
+                del mr, mc
             result = g if result is None else result + g
+            del block, gf, g
         return result

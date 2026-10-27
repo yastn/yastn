@@ -102,11 +102,11 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
     'argsort', 'argsort_which', 'argmax', 'flip', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
-    'dot', 'dot_diag', 'transpose_dot_sum',
+    'dot', 'dot_diag', 'transpose_dot_sum', 'recouple_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask', 'embed_slices',
     'embed_transpose', 'transpose_and_merge', 'transpose_and_merge_scaled', 'unmerge',
-    'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'recouple_sequence', 'scale_blocks', 'scale_blocks_inplace',
+    'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'recouple_sequence', 'recouple_and_merge', 'recouple_and_unfuse', 'recouple_and_fuse', 'scale_blocks', 'scale_blocks_inplace',
     'unique', 'searchsorted', 'isin', 'nonzero', 'cumsum', 'concatenate',
     'repeat', 'where', 'zeros_like', 'full_like', 'arange']
 
@@ -266,6 +266,132 @@ class _RecoupleSequence(torch.autograd.Function):
 def recouple_sequence(data, steps, size):
     from ._recoupling import recoupling_sequence_plan
     return _RecoupleSequence.apply(data, recoupling_sequence_plan(steps), size, False)
+
+
+class _RecoupleMerge(torch.autograd.Function):
+    """Write a hard fusion and its surrounding basis changes into one buffer."""
+
+    @staticmethod
+    def forward(data, before, groups, after, size, adjoint):
+        from ._recoupling import composed_recoupling_blocks, composed_recoupling_terms
+        result = data.new_zeros(size)
+        if after is None:
+            blocks = ((offset, ((offset, records[0][0][1], 1.),))
+                      for offset, records in groups.items())
+        else:
+            blocks = composed_recoupling_blocks(after)
+        for destination, terms in blocks:
+            for middle, shape, right in terms:
+                order = after[0] if after is not None else tuple(range(len(shape)))
+                # Undo the final permutation as a view of the destination.
+                # Splitting its fused axes below also uses views only.
+                output = data if adjoint else result
+                merged = output[destination:destination + prod(shape)].view(
+                    tuple(shape[i] for i in order)).permute(tuple(np.argsort(order)))
+                for record, weight in groups.get(middle, ()):
+                    _, _, source_slice, source_shape, subslices, _ = record
+                    target = merged[subslices].view(source_shape)
+                    incoming = (composed_recoupling_terms(before, source_slice.start)
+                                if before is not None else
+                                ((source_slice.start, source_shape, 1.),))
+                    for source, old_shape, left in incoming:
+                        input_data = result if adjoint else data
+                        values = input_data[source:source + prod(old_shape)].view(old_shape)
+                        if before is not None:
+                            values = values.permute(before[0])
+                        coefficient = float(left * weight * right)
+                        if adjoint:
+                            values.add_(target, alpha=coefficient)
+                        else:
+                            target.add_(values, alpha=coefficient)
+        return result
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data, ctx.before, ctx.groups, ctx.after, _, ctx.adjoint = inputs
+        ctx.input_size = data.numel()
+
+    @staticmethod
+    def backward(ctx, gradient):
+        result = _RecoupleMerge.apply(gradient, ctx.before, ctx.groups, ctx.after,
+                                      ctx.input_size, not ctx.adjoint)
+        return result, None, None, None, None, None
+
+
+def recouple_and_merge(data, before, meta, after, size, weights, lengths, adjoint=False):
+    """Fuse a canonical prefix between permutations without full intermediates.
+
+    Metadata and coefficients are composed per block. Both forward and its
+    adjoint allocate only their output; all block reads and writes are views.
+    """
+    from ._recoupling import recoupling_sequence_plan, adjoint_recoupling_steps
+    if adjoint:
+        # The caller supplies unmerge's forward permutations and reciprocal
+        # weights. Execute it as the adjoint of a merge between transposed
+        # permutations; reduced recoupling matrices need not be orthogonal.
+        before, after = adjoint_recoupling_steps(after), adjoint_recoupling_steps(before)
+    before = recoupling_sequence_plan(before) if before else None
+    after = recoupling_sequence_plan(after) if after else None
+    source_weights = {}
+    start = 0
+    for weight, length in zip(weights, lengths):
+        source_weights[start] = weight
+        start += int(length)
+    groups = {}
+    for record in meta:
+        groups.setdefault(record[0].start, []).append((record, source_weights[record[2].start]))
+    return _RecoupleMerge.apply(data, before, groups, after, size, adjoint)
+
+
+class _RecoupleUnfuse(torch.autograd.Function):
+    """Apply multiple unfusions through source views and one output buffer."""
+
+    @staticmethod
+    def forward(data, plan, outputs, size, adjoint):
+        from ._recoupling import unfuse_sequence_blocks
+        result = data.new_zeros(size)
+        source = result if adjoint else data
+        destination = data if adjoint else result
+        stride = source.stride(0)
+        for offset, shape, terms in unfuse_sequence_blocks(plan, outputs):
+            block = destination[offset:offset + prod(shape)].view(shape)
+            for start, strides, coefficient in terms:
+                values = source.as_strided(shape, tuple(s * stride for s in strides),
+                                           source.storage_offset() + start * stride)
+                if adjoint:
+                    values.add_(block, alpha=coefficient)
+                else:
+                    block.add_(values, alpha=coefficient)
+        return result
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data, ctx.plan, ctx.outputs, _, ctx.adjoint = inputs
+        ctx.input_size = data.numel()
+
+    @staticmethod
+    def backward(ctx, gradient):
+        result = _RecoupleUnfuse.apply(gradient, ctx.plan, ctx.outputs,
+                                       ctx.input_size, not ctx.adjoint)
+        return result, None, None, None, None
+
+
+def recouple_and_unfuse(data, steps, outputs, size):
+    """Return the composed output, or None when composition is too costly."""
+    from ._recoupling import unfuse_sequence_plan
+    plan = unfuse_sequence_plan(steps, outputs)
+    if plan is None:
+        return None
+    return _RecoupleUnfuse.apply(data, plan, outputs, size, False)
+
+
+def recouple_and_fuse(data, adjoint_steps, inputs, size):
+    """Apply a fusion as the adjoint of its unmerge and transpose sequence."""
+    from ._recoupling import unfuse_sequence_plan
+    plan = unfuse_sequence_plan(adjoint_steps, inputs)
+    if plan is None:
+        return None
+    return _RecoupleUnfuse.apply(data, plan, inputs, size, True)
 
 
 def recouple(data, order, meta, size):
@@ -961,6 +1087,24 @@ def dot(Adata, Bdata, meta_dot, Dsize):
 
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     return kernel_transpose_dot_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize)
+
+
+def recouple_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Asteps, Bsteps, Dsize):
+    """Recouple only the blocks requested by the contraction's bounded cache."""
+    from ._recoupling import recoupling_sequence_plan, unfuse_sequence_plan
+    plans = []
+    for steps, reshape in ((Asteps, Areshape), (Bsteps, Breshape)):
+        if steps:
+            outputs = tuple((sl.start, shape) for sl, shape, _, _ in reshape)
+            if unfuse_sequence_plan(tuple(('recouple', order, meta) for order, meta in steps), outputs) is None:
+                return None
+            plans.append(recoupling_sequence_plan(steps))
+        else:
+            plans.append(None)
+    order_a = tuple(range(len(Areshape[0][1]))) if Areshape else ()
+    order_b = tuple(range(len(Breshape[0][1]))) if Breshape else ()
+    return kernel_transpose_dot_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape,
+                                           order_a, order_b, Dsize, *plans)
 
 
 def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):

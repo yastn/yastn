@@ -26,7 +26,7 @@ import numpy as np
 from ._auxiliary import _encode_rows_shared, _row_keys_pair, _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
 from ._auxiliary import find_matching_indices, find_matching_block_keys, argsort_t, get_blocks, hash_blocks, get_trimmed_struct, convert_to_tuples_and_slices
 from ._merging import (_unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask,
-                       _apply_fusion_tree_transpose)
+                       _apply_fusion_tree_transpose, _meta_fusion_tree_transpose)
 from ._tests import _test_can_be_combined, _unpack_trans_test_axes_pair
 from ._yastnerror import YastnError
 from ..backend import import_backend
@@ -36,6 +36,8 @@ if TYPE_CHECKING:
     from . import Tensor
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor', 'fkron']
+
+_NONABELIAN_RECOUPLE_MIN_SIZE = 1 << 20
 
 
 @lru_cache(maxsize=4096)
@@ -201,6 +203,16 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
     if not getattr(a.config.sym, 'IS_ABELIAN', True):
         order_a = nout_a + nin_a
         order_b = nin_b + nout_b
+        if (a.config.backend.BACKEND_ID == 'torch'
+                and getattr(a.config.backend, 'recouple_dot_sum', None) is not None
+                and max(a.size, b.size) >= _NONABELIAN_RECOUPLE_MIN_SIZE
+                and active_flop_tracer() is None
+                and a.config.tensordot_policy in ('fuse_to_matrix', 'fuse_contracted', 'no_fusion')
+                and (order_a != tuple(range(a.ndim_n)) or order_b != tuple(range(b.ndim_n)))):
+            threshold = a.config.lazy_threshold if lazy_threshold is None else lazy_threshold
+            data, struct_out = _tensordot_recoupled(a, b, nout_a, nin_a, nin_b, nout_b, threshold)
+            if data is not None:
+                return a._replace(data=data, struct=struct_out, mfs=mfs_c, hfs=hfs_c, trans=None)
         if order_a != tuple(range(a.ndim_n)):
             a = _apply_fusion_tree_transpose(a, order_a)
         if order_b != tuple(range(b.ndim_n)):
@@ -244,6 +256,23 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
 
     out = a._replace(data=data, struct=struct_out, mfs=mfs_c, hfs=hfs_c, trans=None)
     return out
+
+
+def _tensordot_recoupled(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
+    """Plan canonical inputs while leaving their data in the original basis."""
+    orders = (nout_a + nin_a, nin_b + nout_b)
+    structs, steps = [], []
+    for tensor, order in zip((a, b), orders):
+        plans = (_meta_fusion_tree_transpose(a.config.sym, tensor.struct, order)
+                 if order != tuple(range(tensor.ndim_n)) else ())
+        structs.append(plans[-1][0] if plans else tensor.struct)
+        steps.append(tuple((plan[1], plan[2]) for plan in plans))
+    na, nc, nb = len(nout_a), len(nin_a), len(nout_b)
+    meta, reshape_a, reshape_b, size, struct = _meta_tensordot_nf(
+        a.config.sym, *structs, tuple(range(na)), tuple(range(na, na + nc)),
+        tuple(range(nc)), tuple(range(nc, nc + nb)), lazy_threshold)
+    data = a.config.backend.recouple_dot_sum(a.data, b.data, meta, reshape_a, reshape_b, *steps, size)
+    return data, struct
 
 
 def _tensordot_diag(a, b, in_b, destination):
