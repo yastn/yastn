@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from numbers import Number
+from numbers import Number, Integral
 from typing import TYPE_CHECKING
 from warnings import warn
 
@@ -78,6 +78,7 @@ def svd_with_truncation(a, axes=(0, 1),
                         eps_multiplet=None,
                         hermitian=False,
                         mask_f=None,
+                        D_block_min=0,
                         **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor']:
     r"""
     Split a tensor using an exact singular value decomposition (SVD) into :math:`a = U S V`,
@@ -122,6 +123,15 @@ def svd_with_truncation(a, axes=(0, 1),
         Maximum number of elements kept per block.
         It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
+    D_block_min: int | dict
+        Minimum reduced states kept per sector, or a dictionary of charge-to-minimum
+        counts; unspecified sectors have minimum zero. For example, ``{(1,): 1}``
+        protects one complete spin-1/2 irrep for SU2 if that sector is present.
+        Absent sectors are ignored; minima are capped at the available sector
+        dimensions. Minima override tolerances,
+        but not ``D_block`` or the dense-dimension cap ``D_total``. Infeasible
+        requirements raise ``YastnError``. See :func:`truncation_mask` for details.
+
     largest_gap: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
@@ -154,7 +164,7 @@ def svd_with_truncation(a, axes=(0, 1),
     """
     def mask(S):
         return truncation_mask(S, tol=tol, tol_block=tol_block,
-                            D_block=D_block, D_total=D_total,
+                            D_block=D_block, D_total=D_total, D_block_min=D_block_min,
                             largest_gap=largest_gap,
                             eps_multiplet=eps_multiplet,
                             hermitian=hermitian,
@@ -601,6 +611,7 @@ def truncation_mask(S, which='LR',
                     eps_multiplet=None,
                     hermitian=False,
                     mask_f=None,
+                    D_block_min=0,
                     **kwargs) -> 'Tensor[bool]':
     """
     Generate a mask tensor from a diagonal tensor ``S``.
@@ -634,6 +645,24 @@ def truncation_mask(S, which='LR',
     D_block: int | dict
         Maximum number of elements kept per block.
         It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
+
+    D_block_min: int | dict
+        Nonnegative minimum reduced states kept in each existing sector, or a
+        dictionary mapping selected charges to minima (unspecified sectors: zero).
+        Keys refer to charges in ``S`` (which depend on ``sU`` in decompositions).
+        Single-component charges may be integers or one-element tuples.
+        Required states are chosen first according to ``which``, even below
+        ``tol`` or ``tol_block``; remaining capacity is filled in spectral order.
+        Each non-Abelian reduced state consumes its full irrep dimension from
+        ``D_total``. Entries for sectors absent from ``S`` are ignored.
+        Each minimum is capped at the available sector dimension. Conflicts
+        between these effective minima and ``D_block`` or ``D_total`` raise ``YastnError``.
+        With ``hermitian=True``, conjugate sectors receive the same minimum and
+        states are selected in equal-rank pairs, with the minimum capped at the
+        smaller dimension of each pair. For Abelian symmetries, positive
+        minima cannot be combined with ``largest_gap`` or ``eps_multiplet``.
+        For partial solvers, minima apply only to sectors in the returned spectrum.
+        The default zero leaves the ordinary truncation rules unchanged.
 
     largest_gap: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
@@ -670,6 +699,10 @@ def truncation_mask(S, which='LR',
     if not getattr(S.config.sym, 'IS_ABELIAN', True):
         largest_gap, eps_multiplet = False, None
 
+    minimum = _minimum_sector_counts(S, D_block_min)
+    if minimum and (largest_gap or eps_multiplet is not None):
+        raise YastnError('D_block_min cannot be combined with largest_gap or eps_multiplet for Abelian symmetries.')
+
     verbosity = kwargs.get('verbosity', 0)
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
@@ -698,6 +731,10 @@ def truncation_mask(S, which='LR',
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
     Smask = abs(S.detach()) > float('-inf')  # all True
+
+    if minimum:
+        return _truncation_mask_with_minimum(S, Smask, which, tol, tol_block,
+                                             D_total, D_block, minimum, hermitian)
 
     if tol_block != float('-inf') or D_block != float('inf'):
         tol_null = float('inf') if isinstance(tol_block, dict) else tol_block
@@ -809,6 +846,116 @@ def truncation_mask(S, which='LR',
             #
             St[inds_t[:common_size]] = Stc[inds_tc[:common_size]] = St[inds_t[:common_size]] & Stc[inds_tc[:common_size]]
 
+    return Smask
+
+
+def _minimum_sector_counts(S, setting):
+    """Normalize charge keys without changing the legacy zero-minimum path."""
+    def count(value):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral) or value < 0:
+            raise YastnError('D_block_min counts must be nonnegative integers.')
+        return int(value)
+
+    if not isinstance(setting, dict):
+        value = count(setting)
+        return {t: value for t in S.struct.legs[0].t} if value else {}
+    result = {}
+    for charge, value in setting.items():
+        value = count(value)
+        key = (charge,) if isinstance(charge, Integral) else charge
+        if (not isinstance(key, tuple) or len(key) != S.config.sym.NSYM
+                or any(isinstance(q, (bool, np.bool_)) or not isinstance(q, Integral) for q in key)):
+            raise YastnError('D_block_min keys must be symmetry charge tuples (or integers for one symmetry).')
+        key = tuple(int(q) for q in key)
+        if key in result and result[key] != value:
+            raise YastnError(f'D_block_min contains conflicting counts for sector {key}.')
+        result[key] = value
+    return {key: value for key, value in result.items() if value and key in S.struct.legs[0].t}
+
+
+def _truncation_mask_with_minimum(S, Smask, which, tol, tol_block, D_total, D_block, minimum, hermitian):
+    """Reserve required reduced states, then fill the remaining dense budget."""
+    backend, sym = S.config.backend, S.config.sym
+    if which not in ('LR', 'LM', 'SR', 'SM'):
+        raise YastnError("which must be one of 'LR', 'LM', 'SR', 'SM'.")
+    if D_total != float('inf') and (not isinstance(D_total, Integral) or D_total < 0):
+        raise YastnError('D_total must be a nonnegative integer or infinity when using D_block_min.')
+    charges = S.struct.legs[0].t
+    minimum = dict(minimum)
+    if hermitian:
+        for charge, value in tuple(minimum.items()):
+            partner = sym.conj_charge(charge)
+            if partner not in charges:
+                raise YastnError(f'D_block_min with hermitian=True requires conjugate sector {partner}.')
+            minimum[partner] = max(value, minimum.get(partner, 0))
+
+    dimensions = dict(zip(charges, S.struct.legs[0].D))
+    for charge, value in minimum.items():
+        available = dimensions[charge]
+        if hermitian:
+            available = min(available, dimensions[sym.conj_charge(charge)])
+        minimum[charge] = min(value, available)
+
+    order = np.asarray(backend.to_numpy(backend.argsort_which(S.data, which)), dtype=np.int64)
+    ranks = np.empty(len(order), dtype=np.int64)
+    ranks[order] = np.arange(len(order))
+    allowed = np.asarray(backend.to_numpy(Smask.data), dtype=bool).copy()
+    values = np.asarray(backend.to_numpy(S.data))
+    scores = np.abs(values) if which in ('LM', 'SM') else values.real
+    if tol == float('inf'):
+        allowed[:] = False
+    elif tol != float('-inf'):
+        allowed &= scores > tol * np.max(np.abs(values))
+    sectors, start = {}, 0
+    for charge, dimension in zip(charges, S.struct.legs[0].D):
+        stop = start + dimension
+        indices = np.arange(start, stop)[np.argsort(ranks[start:stop])]
+        lower = minimum.get(charge, 0)
+        upper = D_block.get(charge, 0) if isinstance(D_block, dict) else D_block
+        if upper != float('inf') and (not isinstance(upper, Integral) or upper < 0):
+            raise YastnError('D_block limits must be nonnegative integers or infinity when using D_block_min.')
+        if lower > upper:
+            raise YastnError(f'Effective D_block_min={lower} for sector {charge} exceeds D_block={upper}.')
+        threshold = tol_block.get(charge, float('inf')) if isinstance(tol_block, dict) else tol_block
+        if threshold == float('inf'):
+            allowed[start:stop] = False
+        elif threshold != float('-inf'):
+            allowed[start:stop] &= scores[start:stop] > threshold * np.max(np.abs(values[start:stop]))
+        allowed[indices[int(min(upper, dimension)):]] = False
+        cost = sym.irrep_dimension(charge) if not getattr(sym, 'IS_ABELIAN', True) else 1
+        sectors[charge] = (indices, lower, cost)
+        start = stop
+
+    units, seen = [], set()
+    for charge, (indices, lower, cost) in sectors.items():
+        if charge in seen:
+            continue
+        seen.add(charge)
+        partner = sym.conj_charge(charge) if hermitian else charge
+        if partner == charge:
+            groups = ((int(index),) for index in indices)
+        elif partner in sectors:
+            other, _, other_cost = sectors[partner]
+            groups = ((int(i), int(j)) for i, j in zip(indices, other))
+            cost += other_cost
+            seen.add(partner)
+        else:
+            continue
+        for position, group in enumerate(groups):
+            units.append((max(ranks[list(group)]), group, cost, position < lower))
+
+    keep = np.zeros(len(order), dtype=bool)
+    used = sum(cost for _, _, cost, required in units if required)
+    if used > D_total:
+        raise YastnError(f'D_block_min requires dense dimension {used}, exceeding D_total={D_total}.')
+    for _, group, _, required in units:
+        if required:
+            keep[list(group)] = True
+    for _, group, cost, required in sorted(units):
+        if not required and allowed[list(group)].all() and used + cost <= D_total:
+            keep[list(group)] = True
+            used += cost
+    Smask._data[:] = backend.to_tensor(keep, dtype='bool', device=S.device)
     return Smask
 
 
@@ -1094,7 +1241,7 @@ def _meta_eigh(sym, struct, sU, k_block):
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-                         largest_gap=False, mask_f=None, **kwargs) -> tuple['Tensor', 'Tensor']:
+                         largest_gap=False, mask_f=None, D_block_min=0, **kwargs) -> tuple['Tensor', 'Tensor']:
     r"""
     Split a symmetric tensor using an exact eigenvalue decomposition, :math:`a = U S U^\dagger`.
     Optionally truncate the resulting decomposition.
@@ -1138,6 +1285,10 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
     D_total: int
         largest total number of eigen-values to keep.
 
+    D_block_min: int | dict
+        Minimum reduced states per sector; see :func:`truncation_mask`.
+        Minima override tolerances while respecting ``D_block`` and ``D_total``.
+
     mask_f: function[yastn.Tensor] -> yastn.Tensor
         custom truncation-mask function.
         If provided, it overrides all other truncation-related arguments.
@@ -1149,7 +1300,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
     S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which, policy=policy)
 
     Smask = truncation_mask(S, which=which, tol=tol, tol_block=tol_block,
-                        D_block=D_block, D_total=D_total,
+                        D_block=D_block, D_total=D_total, D_block_min=D_block_min,
                         largest_gap=largest_gap, mask_f=mask_f)
     S, U = Smask.apply_mask(S, U, axes=(0, Uaxis))
     return S, U

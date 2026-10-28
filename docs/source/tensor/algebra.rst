@@ -292,6 +292,32 @@ global truncation rules as ``svd`` followed by ``truncation_mask``; no extra SVD
 pass is introduced. This reduces temporary output storage, but the exact SVD
 backward still retains the full singular vectors it requires.
 
+Use ``D_block_min`` to protect selected symmetry sectors during truncation::
+
+    U, S, V = a.svd_with_truncation(
+        axes=(0, 1), D_total=21, tol=1e-10,
+        D_block_min={(0,): 1, (1,): 1})
+
+For SU2, when both sectors are present, this keeps at least one spin-0 and one
+spin-1/2 irrep, consuming at least three dense states from ``D_total``.
+Each minimum counts reduced states
+(complete irreps), and charge keys refer to the resulting spectrum ``S``.
+An integer minimum applies to every sector present; unspecified dictionary
+entries have minimum zero. Entries for absent sectors are ignored; this also
+applies to sectors omitted by a partial solver. Each minimum is capped at the
+available sector dimension: requesting three reduced states from a sector with
+only two retains both. Required states are selected first, even below
+``tol`` or ``tol_block``, and the remaining capacity is filled in spectral order.
+``D_total`` and ``D_block`` remain hard limits: conflicts with these effective
+minima raise ``YastnError``. The same option is available in
+``eigh_with_truncation`` and ``truncation_mask``, including through algorithm
+options forwarded to these functions. With ``hermitian=True``, minima also
+apply to conjugate sectors, whose states are kept in equal-rank pairs; their
+shared minimum is capped at the smaller sector dimension.
+For Abelian symmetries positive minima cannot be combined with
+``largest_gap`` or ``eps_multiplet``; non-Abelian symmetries already ignore
+these heuristics. The default ``D_block_min=0`` retains the previous behavior.
+
 .. autofunction:: yastn.linalg.svd
 .. autofunction:: yastn.linalg.svd_with_truncation
 .. autofunction:: yastn.linalg.qr
