@@ -50,6 +50,9 @@ class _NonabelianCutensorPlan(NamedTuple):
     coefficients: tuple
     descriptors: tuple
     hashes: tuple
+    shapes_a: tuple
+    shapes_b: tuple
+    products: tuple
 
 
 #: The cuTENSOR plan cache below fronts ``_contractions._meta_tensordot_nf`` for
@@ -88,8 +91,8 @@ def _meta_tensordot_nonabelian_cutensor(sym, struct_a, struct_b,
     The coefficient is applied while packing A. Fusion channels never share a
     coordinate, even when their external charges coincide.
 
-    tensordot has already recoupled both inputs into canonical gluing order;
-    every reduced block can therefore be viewed as a contiguous matrix.
+    Input structures describe canonical gluing order; data may be recoupled
+    directly into packing. Each packed reduced block is a contiguous matrix.
     """
     _trim_no_fusion_metadata_cache()
     from . import _contractions  # use the current cache wrapper after set_cache_maxsize
@@ -97,26 +100,35 @@ def _meta_tensordot_nonabelian_cutensor(sym, struct_a, struct_b,
     assert nin_b + nout_b == tuple(range(len(struct_b.legs)))
     meta, reshape_a, reshape_b, size, struct = _contractions._meta_tensordot_nf(
         sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
-    if not meta:
-        return _NonabelianCutensorPlan(struct, size, (), (), (), (), (), ())
+    products = []
+    for sl, shape, ia, ib, coefficient in sorted(meta, key=lambda record: record[0].start):
+        sa, da, ma, ka = reshape_a[ia]
+        sb, db, kb, nb = reshape_b[ib]
+        assert ka == kb and tuple(shape) == (ma, nb)
+        products.append(((sl.start, sl.stop), (ma, ka, nb),
+                         (sa.start, sa.stop), da, (sb.start, sb.stop), db, coefficient))
+    return _build_nonabelian_cutensor_plan(struct, size, tuple(products))
 
-    outputs = sorted({(sl.start, sl.stop, tuple(shape)) for sl, shape, *_ in meta})
+
+def _build_nonabelian_cutensor_plan(struct, size, products):
+    """Build descriptors for any subset of products, keeping global output slices."""
+    if not products:
+        return _NonabelianCutensorPlan(struct, size, (), (), (), (), (), (), (), (), ())
+    outputs = sorted({(sl[0], sl[1], (dims[0], dims[2])) for sl, dims, *_ in products})
     output_ids = {(start, stop): i for i, (start, stop, _) in enumerate(outputs)}
-    # Sorting gives lexicographic coordinates for both input descriptors.
-    records = sorted(meta, key=lambda record: record[0].start)
     rows = [shape[0] for _, _, shape in outputs]
     cols = [shape[1] for _, _, shape in outputs]
     inner, coords_a, coords_b, slices_a, slices_b, coefficients = [], [], [], [], [], []
-    for r, (sl, shape, ia, ib, coefficient) in enumerate(records):
-        sa, _, ma, ka = reshape_a[ia]
-        sb, _, kb, nb = reshape_b[ib]
-        assert ka == kb and tuple(shape) == (ma, nb)
-        c = output_ids[sl.start, sl.stop]
+    shapes_a, shapes_b = [], []
+    for r, (sl, (_, ka, _), sa, da, sb, db, coefficient) in enumerate(products):
+        c = output_ids[sl]
         inner.append(ka)
         coords_a.append((c, r))
         coords_b.append((r, c))
-        slices_a.append((sa.start, sa.stop))
-        slices_b.append((sb.start, sb.stop))
+        slices_a.append(sa)
+        slices_b.append(sb)
+        shapes_a.append(da)
+        shapes_b.append(db)
         coefficients.append(coefficient)
 
     def descriptor(extents0, extents1, coordinates):
@@ -135,7 +147,30 @@ def _meta_tensordot_nonabelian_cutensor(sym, struct_a, struct_b,
                    for v in np.frombuffer(hash_blocks(_cutensor_meta(*desc[:4]), out=bytes), dtype=np.int64))
     return _NonabelianCutensorPlan(
         struct, size, tuple(slices_a), tuple(slices_b),
-        tuple((start, stop) for start, stop, _ in outputs), tuple(coefficients), descriptors, hashes)
+        tuple((start, stop) for start, stop, _ in outputs), tuple(coefficients), descriptors, hashes,
+        tuple(shapes_a), tuple(shapes_b), products)
+
+
+@register_cache(key='cutensor_nonabelian_batches')
+@lru_cache(maxsize=128)
+def _nonabelian_cutensor_batches(struct, size, products, max_elements):
+    """Limit packed A+B+C storage per call; a single oversized product stays intact.
+
+    Output blocks may occur in several batches and must be accumulated. The
+    backend handles oversized products without packing via its streamed kernel.
+    """
+    batches, pending, used = [], [], 0
+    for product in products:
+        m, k, n = product[1]
+        cost = m * k + k * n + m * n
+        if pending and used + cost > max_elements:
+            batches.append(_build_nonabelian_cutensor_plan(struct, size, tuple(pending)))
+            pending, used = [], 0
+        pending.append(product)
+        used += cost
+    if pending:
+        batches.append(_build_nonabelian_cutensor_plan(struct, size, tuple(pending)))
+    return tuple(batches)
 
 #: Below this many rows the GPU matcher / mask fall back to numpy (launch+transfer
 #: overhead dominates). Tunable via env ``YASTN_META_CUTENSOR_GPU_MIN``.

@@ -203,7 +203,7 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
     if not getattr(a.config.sym, 'IS_ABELIAN', True):
         order_a = nout_a + nin_a
         order_b = nin_b + nout_b
-        if (a.config.backend.BACKEND_ID == 'torch'
+        if (a.config.backend.BACKEND_ID in ('torch', 'torch_cutensor')
                 and getattr(a.config.backend, 'recouple_dot_sum', None) is not None
                 and max(a.size, b.size) >= _NONABELIAN_RECOUPLE_MIN_SIZE
                 and active_flop_tracer() is None
@@ -268,9 +268,15 @@ def _tensordot_recoupled(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
         structs.append(plans[-1][0] if plans else tensor.struct)
         steps.append(tuple((plan[1], plan[2]) for plan in plans))
     na, nc, nb = len(nout_a), len(nin_a), len(nout_b)
+    axes = (tuple(range(na)), tuple(range(na, na + nc)),
+            tuple(range(nc)), tuple(range(nc, nc + nb)))
+    if a.config.backend.BACKEND_ID == 'torch_cutensor' and not a.config.backend.is_cpu_device(a.device):
+        from ._contractions_cutensor import _meta_tensordot_nonabelian_cutensor
+        plan = _meta_tensordot_nonabelian_cutensor(a.config.sym, *structs, *axes, lazy_threshold)
+        data = a.config.backend.tensordot_nonabelian(a.data, b.data, plan, *steps)
+        return data, plan.struct
     meta, reshape_a, reshape_b, size, struct = _meta_tensordot_nf(
-        a.config.sym, *structs, tuple(range(na)), tuple(range(na, na + nc)),
-        tuple(range(nc)), tuple(range(nc, nc + nb)), lazy_threshold)
+        a.config.sym, *structs, *axes, lazy_threshold)
     data = a.config.backend.recouple_dot_sum(a.data, b.data, meta, reshape_a, reshape_b, *steps, size)
     return data, struct
 

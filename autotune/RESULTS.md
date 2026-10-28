@@ -4,6 +4,58 @@ Machine-specific measurements; compare variants within the same workload and
 environment. Raw logs, checkpoints, profiles and one-off experiments are kept
 outside the repository. Reproduction commands are in [README.md](README.md).
 
+## cuTENSOR packing batches and NNN default (2026-10-28)
+
+Workstation 46, RTX 3090 (24 GiB), Torch 2.10.0+cu126, one CPU thread.
+Runs were serial, with occupancy checked at each launch. Raw logs and the
+benchmark script are in `/home/yintai/cutensor_20261028_codex/`; the isolated
+tested tree is `/tmp/yintai_cutensor_20261028_v1/source/`. Seven changed
+production/test files matched the local tree by SHA-256 after the runs.
+
+The cuTENSOR/CUDA regression suite passed 379 cases with one non-strict XPASS
+and no skips; this includes real TAPP CUDA cases and CPU descriptor oracles.
+NNN append/close and SU2 CTM/NTU passed another 41 cases. NNN selection tests
+now honor `--backend torch_cutensor`; the startup log confirms the new NNN
+input chunk default of 8 GiB (8589934592 bytes).
+
+The first GPU run exposed three gradient failures: the contiguous-slice pack
+shortcut returned a strided incoming gradient view, while TAPP's descriptors
+address unit-stride storage. Making that shortcut return contiguous storage
+fixed the failures. Added cases cover stride-two and expanded scalar views;
+the complete GPU suite above was rerun after the correction.
+
+The benchmark uses float64 SU2/SU2xU1 tensors with reduced degeneracy 12 or 16
+in each of three sectors. The baseline loads `backend_torch_cutensor.py` from
+`4caae981`; both variants use the same current tensor metadata and inputs.
+All 12 variant/workload comparisons checked nonempty, nonzero outputs and both
+input gradients against ordinary Torch. The 24 timing/memory records have a
+positive completion marker. Timings are medians of three synchronized warm
+samples, after one warmup. Memory is extra peak live PyTorch allocation above
+the input/reference baseline, not total device memory.
+
+| Symmetry / degeneracy | Operation | Baseline ms | Default ms | 8 MiB ms | Baseline peak MiB | Default peak MiB | 8 MiB peak MiB |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SU2 / 12 | forward | 4.579 | 4.659 | 6.231 | 84.000 | 84.000 | 23.230 |
+| SU2 / 12 | forward + backward | 11.010 | 12.346 | 33.101 | 111.320 | 84.000 | 36.203 |
+| SU2 / 16 | forward | 13.695 | 14.261 | 22.072 | 196.000 | 196.000 | 39.000 |
+| SU2 / 16 | forward + backward | 35.146 | 38.766 | 70.794 | 352.042 | 236.042 | 86.598 |
+| SU2xU1 / 12 | forward | 1.633 | 1.716 | 2.361 | 49.719 | 49.719 | 20.383 |
+| SU2xU1 / 12 | forward + backward | 4.023 | 6.007 | 16.615 | 57.945 | 53.199 | 26.736 |
+| SU2xU1 / 16 | forward | 4.686 | 5.042 | 7.566 | 88.000 | 88.000 | 29.000 |
+| SU2xU1 / 16 | forward + backward | 12.092 | 13.596 | 41.804 | 126.017 | 102.000 | 56.598 |
+
+The default packing budget is at most 1 GiB and did not split these small
+primitive workloads. Saving original inputs lowers differentiated peaks but
+repacking increases backward time. Forcing 8 MiB with
+`YASTN_CUTENSOR_PACK_CHUNK_BYTES=8388608` lowers forward peaks by 59-80% and
+forward-plus-backward peaks by 54-75%, with forward 1.36-1.61x slower and
+forward-plus-backward 2.01-4.13x slower. Keep the adaptive default unless lower
+memory is needed. The cuTENSOR packing budget is separate from
+`YASTN_NNN_APPEND_CHUNK_BYTES`. After these runs, its default was changed from
+8 GiB to 4 GiB (4294967296 bytes); the recorded test logs retain the 8 GiB
+setting used during validation. These results do
+not constitute a rerun of the H100 D=21 WCSS job.
+
 ## CTMRG lifetimes, QR/SVD and streamed recoupling (2026-10-24)
 
 Baseline: `3e7c8fae7d072e9f656dcaf5f4f245201547fda4`. Candidate: working-tree

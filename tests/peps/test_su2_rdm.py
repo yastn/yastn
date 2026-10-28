@@ -19,11 +19,17 @@ def _partial_trace(matrix, dimension, keep):
     return tensor.reshape(dimension ** len(keep), dimension ** len(keep))
 
 
-@pytest.mark.parametrize('column', [0, 1])
-@pytest.mark.parametrize('model, sym', [
-    ('spin12', 'SU2'), ('spin1', 'SU2'),
-    ('Hubbard', 'SU2'), ('Hubbard', 'SU2xU1'),
-    ('tJ', 'SU2'), ('tJ', 'SU2xU1'),
+# These two column-1 cases took about 70 s and 30 s in the CPU regression run.
+# Keep the other ten cases, including every model/symmetry, in the default suite.
+@pytest.mark.parametrize('model, sym, column', [
+    pytest.param(model, sym, column, marks=(
+        pytest.mark.skipif("not config.getoption('long_tests')",
+                           reason='long RDM comparison; pass --long_tests to run it'),
+    ) if column == 1 and (model, sym) in {('spin1', 'SU2'), ('Hubbard', 'SU2xU1')} else ())
+    for model, sym in [('spin12', 'SU2'), ('spin1', 'SU2'),
+                       ('Hubbard', 'SU2'), ('Hubbard', 'SU2xU1'),
+                       ('tJ', 'SU2'), ('tJ', 'SU2xU1')]
+    for column in (0, 1)
 ])
 def test_su2_patch_density_matrices(config_kwargs, model, sym, column):
     step = 0.07 + 0.04j

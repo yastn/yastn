@@ -42,13 +42,13 @@ def _descriptor_matrix(data, descriptor):
 
 
 def _dense_descriptor_oracle(a, b, axes_a, axes_b, *args):
-    assert axes_a == [1] and axes_b == [0]
+    assert (axes_a, axes_b) in (([1], [0]), ([1], [1]), ([0], [0]))
     assert args[-2] == [0, 1] and len(args[-1]) == 24
     desc_a, desc_b, desc_c = args[:5], args[5:10], args[10:15]
     ma, _ = _descriptor_matrix(a, desc_a)
     mb, _ = _descriptor_matrix(b, desc_b)
     _, regions = _descriptor_matrix(a.new_empty(0), desc_c)
-    product = ma @ mb
+    product = torch.tensordot(ma, mb, dims=(axes_a, axes_b))
     return torch.cat([product[region].reshape(-1) for region in regions])
 
 
@@ -147,7 +147,7 @@ def test_cutensor_multisector_and_gradients(accelerated, sym, dtypes, axes):
     reference = torch.autograd.grad((expected.data.conj() * weight).real.sum(), (a.data, b.data))
     for found, wanted in zip(gradients, reference):
         torch.testing.assert_close(found, wanted, atol=1e-10, rtol=1e-10)
-    assert len(calls) == 1
+    assert len(calls) == 3  # Forward and one cuTENSOR call per input gradient.
 
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
@@ -310,3 +310,193 @@ def test_cutensor_pack_mixed_precision_accumulation(oracle_backend, monkeypatch,
     out = oracle_backend._pack(data, ((0, 1),) * 3, dtype=torch.float64)
     weight = out.new_tensor([1e8, 1., -1e8])
     torch.testing.assert_close(torch.autograd.grad(out, data, weight)[0], torch.ones_like(data))
+
+
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+@pytest.mark.parametrize('dtypes', [('float64', 'float64'), ('complex128', 'complex128'),
+                                  ('float32', 'complex128'), ('complex128', 'float32')])
+@pytest.mark.parametrize('axes', [((0, 3), (1, 2)), ((2, 3), (3, 2)),
+                                  ((0, 1, 2, 3), (1, 0, 3, 2))])
+def test_cutensor_recoupled_contraction(accelerated, monkeypatch, sym, dtypes, axes):
+    from yastn.tensor import _contractions
+    backend, device, calls = accelerated
+    config = yastn.make_config(sym=sym, backend=backend, default_device=device)
+    charges = (0, 1, 2) if sym == 'SU2' else ((0, 0), (1, 1), (2, 2))
+    leg = yastn.Leg(config, t=charges, D=(1, 2, 1))
+    a, b = (yastn.rand(config, legs=(leg, leg.conj()) * 2, dtype=dtype)
+            for dtype in dtypes)
+    a = a.remove_random_blocks(number=a.nblocks // 4, keep_legs=True)
+    b = b.remove_random_blocks(number=b.nblocks // 3, keep_legs=True)
+    a.requires_grad_()
+    b.requires_grad_()
+    reference_config = config._replace(backend=backend_torch)
+    expected = yastn.tensordot(a._replace(config=reference_config),
+                              b._replace(config=reference_config), axes)
+    assert expected.size > 0 and expected.norm().item() > 0
+    monkeypatch.setattr(_contractions, '_NONABELIAN_RECOUPLE_MIN_SIZE', 0)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('cuTENSOR contraction materialized a full recoupled input')
+
+    monkeypatch.setattr(backend, 'recouple', forbidden)
+    monkeypatch.setattr(backend, 'recouple_sequence', forbidden)
+    monkeypatch.setattr(backend, 'recouple_dot_sum', forbidden)
+    actual = yastn.tensordot(a, b, axes)
+    assert len(calls) == 1
+    assert (actual.struct, actual.hfs, actual.trans) == (expected.struct, expected.hfs, expected.trans)
+    tolerance = 2e-5 if 'float32' in dtypes else 1e-11
+    torch.testing.assert_close(actual.data, expected.data, atol=tolerance, rtol=tolerance)
+    gradient = torch.randn(actual.size * 2, dtype=actual.data.dtype, device=device)[::2]
+    found = torch.autograd.grad(actual.data, (a.data, b.data), gradient)
+    reference = torch.autograd.grad(expected.data, (a.data, b.data), gradient)
+    for x, y in zip(found, reference):
+        torch.testing.assert_close(x, y, atol=tolerance, rtol=tolerance)
+
+
+def test_cutensor_recoupled_fallback(accelerated, monkeypatch):
+    from yastn.backend import _recoupling
+    from yastn.tensor import _contractions
+    backend, device, calls = accelerated
+    config = yastn.make_config(sym='SU2', backend=backend, default_device=device)
+    leg = yastn.Leg(config, t=(0, 1, 2), D=(1, 2, 1))
+    a = yastn.rand(config, legs=(leg, leg.conj()) * 2)
+    b = yastn.rand_like(a)
+    axes = ((0, 3), (1, 2))
+    expected = yastn.tensordot(a, b, axes)
+    assert expected.size > 0 and expected.norm().item() > 0
+    monkeypatch.setattr(_contractions, '_NONABELIAN_RECOUPLE_MIN_SIZE', 0)
+    monkeypatch.setattr(_recoupling, '_UNFUSE_COMPOSITION_MAX_WORK_RATIO', 0)
+    original = backend.tensordot_nonabelian
+    declined = []
+
+    def tracked(*args):
+        result = original(*args)
+        if len(args) > 3:
+            assert result is None
+            declined.append(True)
+        return result
+
+    monkeypatch.setattr(backend, 'tensordot_nonabelian', tracked)
+    actual = yastn.tensordot(a, b, axes)
+    assert declined == [True] and len(calls) == 2
+    torch.testing.assert_close(actual.data, expected.data)
+
+
+@pytest.mark.parametrize('dtype', [torch.float64, torch.complex128])
+def test_cutensor_recouple_pack_autograd(oracle_backend, request, dtype):
+    from yastn.backend._recoupling import recoupling_sequence_plan
+    # Two non-orthogonal basis changes, with permutation and repeated packing.
+    first = ((1, 0), ((0, 0, (2, 3), 0.5), (0, 6, (2, 3), -2.),
+                       (6, 0, (2, 3), 1.), (6, 6, (2, 3), 0.25)))
+    second = ((0, 1), ((0, 0, (3, 2), 2.), (0, 6, (3, 2), -0.5),
+                        (6, 0, (3, 2), -1.), (6, 6, (3, 2), 3.)))
+    plan = recoupling_sequence_plan((first, second))
+    data = torch.randn(24, dtype=dtype, device=request.config.getoption('--device'))[::2].requires_grad_()
+    slices, shapes, weights = ((6, 12), (0, 6), (6, 12)), ((3, 2),) * 3, (0.5, -2., 3.)
+
+    def operation(x):
+        return oracle_backend._RecouplePack.apply(x, slices, shapes, plan, weights, torch.complex128)
+
+    def reference(x):
+        recoupled = backend_torch.recouple_sequence(x.to(torch.complex128), (first, second), 12)
+        return torch.cat([recoupled[start:stop] * weight for (start, stop), weight in zip(slices, weights)])
+
+    saved = []
+    with torch.autograd.graph.saved_tensors_hooks(lambda x: saved.append(x) or x, lambda x: x):
+        actual = operation(data)
+    assert actual.numel() == 18 and saved == []
+    torch.testing.assert_close(actual, reference(data))
+    gradient = torch.randn(36, dtype=actual.dtype, device=data.device)[::2]
+    torch.testing.assert_close(torch.autograd.grad(actual, data, gradient)[0],
+                               torch.autograd.grad(reference(data), data, gradient)[0])
+    assert torch.autograd.gradcheck(operation, (data,))
+    assert torch.autograd.gradgradcheck(operation, (data,))
+
+
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+@pytest.mark.parametrize('conjugate', [False, True])
+@pytest.mark.parametrize('policy', ['fuse_to_matrix', 'fuse_contracted', 'no_fusion'])
+def test_cutensor_recoupled_pending_transpose(accelerated, monkeypatch, sym, conjugate, policy):
+    from yastn.backend import _recoupling
+    from yastn.tensor import _contractions
+    backend, device, calls = accelerated
+    config = yastn.make_config(sym=sym, backend=backend, default_device=device, tensordot_policy=policy)
+    charges = (0, 1, 2) if sym == 'SU2' else ((0, 0), (1, 1), (2, 2))
+    leg = yastn.Leg(config, t=charges, D=(1, 2, 1))
+    tensors = []
+    for side, order in enumerate(((2, 0, 3, 1), (3, 1, 2, 0))):
+        charge = (2 * (1 - side),) if sym == 'SU2' else (2 * (1 - side), 0)
+        tensor = yastn.rand(config, legs=(leg, leg.conj()) * 2, n=charge, dtype='complex128')
+        storage = tensor.data.new_empty(tensor.size * 2)
+        storage[::2] = tensor.data
+        tensors.append(tensor._replace(data=storage[::2].detach().requires_grad_()).transpose(order))
+    a, b = tensors
+    assert not a.data.is_contiguous() and not b.data.is_contiguous()
+    axes, conj = ((0, 3), (1, 2)), (conjugate, conjugate)
+    reference_config = config._replace(backend=backend_torch)
+    expected = yastn.tensordot(a._replace(config=reference_config),
+                              b._replace(config=reference_config), axes, conj=conj)
+    assert expected.size > 0 and expected.norm().item() > 0
+    monkeypatch.setattr(_contractions, '_NONABELIAN_RECOUPLE_MIN_SIZE', 0)
+    # Charged outputs repeat many packed blocks and normally trip the cost
+    # limit. Force composition here to test the layouts; fallback is separate.
+    monkeypatch.setattr(_recoupling, '_UNFUSE_COMPOSITION_MAX_WORK_RATIO', 1000)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('cuTENSOR contraction materialized a full recoupled input')
+
+    monkeypatch.setattr(backend, 'recouple', forbidden)
+    monkeypatch.setattr(backend, 'recouple_sequence', forbidden)
+    actual = yastn.tensordot(a, b, axes, conj=conj)
+    assert len(calls) == 1
+    assert (actual.struct, actual.hfs, actual.trans) == (expected.struct, expected.hfs, expected.trans)
+    torch.testing.assert_close(actual.data, expected.data)
+    gradient = torch.randn_like(actual.data)
+    found = torch.autograd.grad(actual.data, (a.data, b.data), gradient)
+    reference = torch.autograd.grad(expected.data, (a.data, b.data), gradient)
+    for x, y in zip(found, reference):
+        torch.testing.assert_close(x, y)
+
+
+def test_cutensor_recoupled_cpu_fallback(oracle_backend, monkeypatch):
+    from yastn.tensor import _contractions
+    backend = SimpleNamespace(**vars(oracle_backend))
+    config = yastn.make_config(sym='SU2', backend=backend)
+    leg = yastn.Leg(config, t=(0, 1, 2), D=(1, 2, 1))
+    a = yastn.rand(config, legs=(leg, leg.conj()) * 2)
+    b = yastn.rand_like(a)
+    axes = ((0, 3), (1, 2))
+    expected = yastn.tensordot(a, b, axes)
+    assert expected.size > 0 and expected.norm().item() > 0
+    monkeypatch.setattr(_contractions, '_NONABELIAN_RECOUPLE_MIN_SIZE', 0)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('CPU contraction called cuTENSOR or materialized a full recoupled input')
+
+    monkeypatch.setattr(backend, 'tensordot_nonabelian', forbidden)
+    monkeypatch.setattr(backend, 'recouple', forbidden)
+    monkeypatch.setattr(backend, 'recouple_sequence', forbidden)
+    actual = yastn.tensordot(a, b, axes)
+    torch.testing.assert_close(actual.data, expected.data)
+
+
+def test_cutensor_recouple_pack_allocation(oracle_backend):
+    from yastn.backend._recoupling import recoupling_sequence_plan
+    from yastn.tensor._merging import _meta_fusion_tree_transpose
+    from yastn.tensor._contractions_cutensor import _meta_tensordot_nonabelian_cutensor
+    config = yastn.make_config(sym='SU2', backend='torch')
+    leg = yastn.Leg(config, t=(0, 1, 2), D=(3, 3, 1))  # D=12.
+    a = yastn.rand(config, legs=(leg, leg.conj()) * 2)
+    steps = _meta_fusion_tree_transpose(config.sym, a.struct, (0, 3, 1, 2))
+    recoupling = recoupling_sequence_plan(tuple((step[1], step[2]) for step in steps))
+    plan = _meta_tensordot_nonabelian_cutensor(
+        config.sym, steps[-1][0], a.struct, (0, 1), (2, 3), (0, 1), (2, 3), 0.5)
+    assert plan.coefficients and plan.slices_a
+    with torch.profiler.profile(profile_memory=True) as profile:
+        packed = oracle_backend._RecouplePack.apply(
+            a.data, plan.slices_a, plan.shapes_a, recoupling, plan.coefficients, a.data.dtype)
+    allocations = [event.self_cpu_memory_usage for event in profile.events()
+                   if event.self_cpu_memory_usage > 0]
+    assert packed.numel() > 0 and allocations
+    # The packed output is the only tensor allocation; source blocks are views.
+    assert sum(allocations) == packed.numel() * packed.element_size()

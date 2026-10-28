@@ -13,11 +13,100 @@
 # limitations under the License.
 # ==============================================================================
 from math import isfinite
+import os
+import numpy as np
 
 from ._env_contractions import *
 from ._ntu_metric import NTUMetric
 from .._evolution import BondMetric
 from ....tensor import tensordot, YastnError, ncon
+from ....initialize import eye
+from ....tensor._auxiliary import get_blocks
+from ....tensor._contractions import _apply_mask_axes
+from ....tensor._merging import _mask_tensors_leg_intersection
+from ....tensor._tests import _unpack_trans_test_axes_pair
+
+
+# Target size of the selected boundary vector, not a bound on total memory.
+# Closing each selection immediately also avoids the full append output.
+_NNN_APPEND_CHUNK_BYTES = 4 << 30
+
+
+def _nnn_vector_ranges(vector, axis, budget):
+    """Partition reduced multiplicities by their actual input storage cost."""
+    native = vector.trans[axis]
+    blocks = get_blocks(vector.config.sym, vector.struct)
+    itemsize = np.dtype(vector.yastn_dtype).itemsize
+    costs = {}
+    for charge, shape, (start, stop) in zip(blocks.t[:, native], blocks.D, blocks.slc):
+        charge = tuple(charge)
+        costs[charge] = costs.get(charge, 0) + int(stop - start) // int(shape[native]) * itemsize
+    start, stop, used = 0, 0, 0
+    leg = vector.get_legs(axis)
+    for charge, dimension in zip(leg.t, leg.D):
+        cost = costs.get(charge, 0)
+        for _ in range(dimension):
+            if stop > start and used + cost > budget:
+                yield start, stop
+                start, used = stop, 0
+            stop += 1
+            used += cost
+    if stop > start:
+        yield start, stop
+
+
+def _append_vec_nnn(Ac, A, vector, closing, append, vertical):
+    """Append and close one internal boundary selection at a time.
+
+    The cut leg is summed over by the closing contraction. Partition its
+    multiplicities in both operands, retaining complete irreps. This is an
+    exact resolution of the identity; it does not partition an open QR leg
+    or require a streamed representation of the final metric.
+    """
+    setting = os.environ.get('YASTN_NNN_APPEND_CHUNK_BYTES', str(_NNN_APPEND_CHUNK_BYTES))
+    try:
+        budget = int(setting)
+        if budget <= 0:
+            raise ValueError
+    except ValueError:
+        raise YastnError(f'YASTN_NNN_APPEND_CHUNK_BYTES={setting!r}: '
+                         'expected a positive integer number of bytes.') from None
+
+    def close(v, c):
+        if vertical:
+            return tensordot(v, c, axes=((2, 3), (0, 1)))
+        return tensordot(c, v, axes=((2, 1), (0, 1)))
+
+    va, ca = (3, 0) if vertical else (0, 2)
+    if (vector.size * np.dtype(vector.yastn_dtype).itemsize <= budget
+            or vector.mfs[va] != (1,) or closing.mfs[ca] != (1,)):
+        # Transfer the sole reference so append can release its input when
+        # rebinding its working tensor, just as in the original call chain.
+        pending = [vector]
+        del vector
+        return close(append(Ac, A, pending.pop()), closing)
+    mask_needed, (nva, nca) = _unpack_trans_test_axes_pair(vector, closing, sgn=-1, axes=((va,), (ca,)))
+    if mask_needed:
+        mv, mc, hv, hc = _mask_tensors_leg_intersection(vector, closing, nva, nca)
+        vector = _apply_mask_axes(vector, nva, mv)._replace(hfs=hv)
+        closing = _apply_mask_axes(closing, nca, mc)._replace(hfs=hc)
+    if vector.size == 0:
+        return close(append(Ac, A, vector), closing)
+    # This leg is never unfused again: only its total charge and multiplicity
+    # enter append/close. Drop the same history on both ends before masking.
+    vector = vector.drop_leg_history(va)
+    closing = closing.drop_leg_history(ca)
+    identity = eye(vector.config, legs=vector.get_legs(va), device=vector.device)
+    result = None
+    for start, stop in _nnn_vector_ranges(vector, va, budget):
+        mask = identity * 0
+        mask._data[start:stop] = 1
+        selected, boundary = mask.apply_mask(vector, closing, axes=(va, ca))
+        selected = append(Ac, A, selected)
+        value = close(selected, boundary)
+        result = value if result is None else result + value
+        del selected, boundary, value, mask
+    return result
 
 
 class EnvNTU:
@@ -42,6 +131,11 @@ class EnvNTU:
             intact. None retains the full metric (default). With streaming, use
             fix_metric=None in evolution or truncation. Supports SVD and EAT
             initializations, and NN and multi-site/NNN gate paths.
+            Large hard-fused NNN boundary vectors use internal chunks
+            independently of this setting, including when it is None.
+            Set ``YASTN_NNN_APPEND_CHUNK_BYTES`` to a positive integer number
+            of bytes to change their input chunk target (default: 4 GiB).
+            It is read on each append call and does not bound total memory.
 
         opts_eat: dict | None
             Streaming EAT power-iteration options: relative singular-pair
@@ -492,18 +586,18 @@ class EnvNTU:
             ell = edge_l(m[0, -1])
             clt = cor_tl(m[-1, -1])
             elt = edge_t(m[-1, 0])
-            vecl = append_vec_tl(Q0_ket, Q0, ell @ (clt @ elt))
             elb = edge_b(m[1, 0])
             clb = cor_bl(m[1, -1])
-            vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
+            vecl = _append_vec_nnn(Q0_ket, Q0, ell @ (clt @ elt),
+                                   elb @ clb, append_vec_tl, vertical=False)
 
             err = edge_r(m[0, 2])
             crb = cor_br(m[1, 2])
             erb = edge_b(m[1, 1])
-            vecr = append_vec_br(Q1_ket, Q1, err @ (crb @ erb))
             ert = edge_t(m[-1, 1])
             crt = cor_tr(m[-1, 2])
-            vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
+            vecr = _append_vec_nnn(Q1_ket, Q1, err @ (crb @ erb),
+                                   ert @ crt, append_vec_br, vertical=False)
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(s0, (1, 0)) == s1
@@ -514,18 +608,18 @@ class EnvNTU:
             etl = edge_l(m[0, -1])
             ctl = cor_tl(m[-1, -1])
             ett = edge_t(m[-1, 0])
-            vect = append_vec_tl(Q0_ket, Q0, etl @ (ctl @ ett))
             ctr = cor_tr(m[-1, 1])
             etr = edge_r(m[0, 1])
-            vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
+            vect = _append_vec_nnn(Q0_ket, Q0, etl @ (ctl @ ett),
+                                   ctr @ etr, append_vec_tl, vertical=True)
 
             ebr = edge_r(m[1, 1])
             cbr = cor_br(m[2, 1])
             ebb = edge_b(m[2, 0])
-            vecb = append_vec_br(Q1_ket, Q1, ebr @ (cbr @ ebb))
             cbl = cor_bl(m[2, -1])
             ebl = edge_l(m[1, -1])
-            vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
+            vecb = _append_vec_nnn(Q1_ket, Q1, ebr @ (cbr @ ebb),
+                                   cbl @ ebl, append_vec_br, vertical=True)
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 

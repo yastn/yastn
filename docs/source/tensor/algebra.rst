@@ -88,7 +88,7 @@ With ``backend='torch_cutensor'`` and a CUDA device, non-Abelian contractions
 (including ``SU2`` and ``SU2xU1``) use channel-aware reduced-block metadata.
 Each nonzero gluing contribution becomes a separate contracted section of a
 block-sparse matrix product. The input packing applies its recoupling coefficient,
-and one ``tensordot_bs_v2`` call sums the products into their output channels.
+and ``tensordot_bs_v2`` sums the products into their output channels.
 No expansion into the magnetic basis is needed. PyTorch autograd propagates
 through the packing, cuTENSOR contraction, and output embedding, including sums
 of gradients for reused input blocks.
@@ -97,19 +97,36 @@ This path is selected independently of ``tensordot_policy``. Channel planning
 runs on the CPU and is cached; ``meta_tensordot_policy`` still controls the
 Abelian cuTENSOR path. Non-Abelian tensors on CPU use the ordinary PyTorch kernel.
 
-Packing duplicates reduced blocks that contribute more than once, so temporary
-memory depends on the number of nonzero gluing contributions. Compact device
-metadata is cached. Gather indices and coefficient expansion are limited to
+Packing duplicates reduced blocks that contribute more than once. Products are
+partitioned into batches before packing, and each batch's result is accumulated
+into the final output, including channels shared by multiple batches.
+``YASTN_CUTENSOR_PACK_CHUNK_BYTES`` sets the positive byte budget for packed
+A+B+C per call (default: 1 GiB). Large CUDA contractions reduce that budget to
+at most one eighth of available memory after allowing for the final output.
+Budgets are rounded down to a power of two in elements to reuse metadata.
+This bounds packed storage, not the final output or cuTENSOR workspace.
+A single product exceeding the budget uses Torch's streamed block kernel
+without packing. A cuTENSOR allocation failure also retries the affected batch
+with that kernel; other runtime errors propagate unchanged.
+
+Compact device metadata is cached. Gather indices and coefficient expansion are limited to
 chunks of at most ``2**20`` elements, and backward recomputes these maps instead
 of retaining full maps in the autograd graph. Dtype promotion happens while
-packing, without a separate promoted copy of the whole input. Output embedding
-also uses chunks and writes into a single zero-initialized buffer. Combining
+packing, without a separate promoted copy of the whole input. Large noncanonical
+inputs can recouple directly into packing, subject to a composition cost limit.
+Autograd saves only the original operands needed for the requested derivatives,
+not their packed copies. Backward rebuilds one opposite operand's packing per
+batch, contracts with cuTENSOR, and accumulates at promoted precision before
+converting to the input dtype. This trades extra packing work for lower retained
+memory. Output embedding also uses chunks and writes into a single
+zero-initialized buffer. Combining
 many block products into one call can reduce launch overhead, but packing and
 cuTENSOR planning can outweigh that benefit for small contractions. Measure the
 workload with ``python autotune/bench_nonabelian_cutensor.py`` on the target GPU;
 the script checks values and gradients before reporting warmed-up timings.
-Its memory counter measures PyTorch allocations, excluding workspace allocated
-directly by cuTENSOR.
+Its memory counter measures PyTorch allocations. The bundled TAPP revision also
+uses PyTorch's allocator for workspace; externally allocated workspace in other
+versions is not included.
 
 The ordinary PyTorch contraction kernel materializes permuted blocks on demand,
 with at most 8 MiB cached per operand. Larger blocks are temporary and can be
