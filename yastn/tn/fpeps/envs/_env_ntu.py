@@ -123,7 +123,8 @@ class EnvNTU:
             Peps state being evolved.
 
         which: str
-            Type of bond environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
+            Type of bond environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++',
+            or 'LadderN' with N >= 1 layers on either side ('Ladder' means 'Ladder2').
 
         metric_chunk_size: int | None
             Stream the metric in blocks of this many multiplicities on the first
@@ -895,7 +896,7 @@ class EnvNTU:
 
     def _g_Ladder(self, Q0, Q1, s0, s1, dirn, Q0_ket, Q1_ket):
         r"""
-        Calculates metric tensor within "NTU-NN" approximation.
+        Contract an N-layer ladder around the updated bond.
 
         For dirn == 'h':
 
@@ -921,6 +922,8 @@ class EnvNTU:
         """
         digits = ''.join(c for c in self.which if c.isdigit())
         nn = int(digits) if digits else 2
+        if nn < 1:
+            raise YastnError('NTU Ladder requires at least one environment layer.')
 
         if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -946,7 +949,8 @@ class EnvNTU:
 
             et = ctl @ ctr
             eb = cbr @ cbl
-            for ii in range(1, nn):
+            # Grow the boundary from the outermost corners toward the QR pair.
+            for ii in range(nn - 1, 0, -1):
                 et = ncon([et, env_tl[ii], env_tr[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
                 eb = ncon([eb, env_br[ii], env_bl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
             g = ncon([eb, env_l, et, env_r], [[3, 2], [2, -0, 1], [1, 4], [4, -1, 3]])
@@ -973,9 +977,12 @@ class EnvNTU:
 
             el = cbl @ ctl
             er = ctr @ cbr
-            for ii in range(1, nn):
+            for ii in range(nn - 1, 0, -1):
                 el = ncon([el, env_bl[ii], env_tl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
                 er = ncon([er, env_tr[ii], env_br[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
             g = ncon([el, env_t, er, env_b], [[4, 1], [1, -0, 2], [2, 3], [3, -1, 4]])
 
+        # ncon can leave the two open double-layer legs in a pending transpose.
+        # Materialize their order before exposing the non-Abelian fusion trees.
+        g = g.consume_transpose()
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))

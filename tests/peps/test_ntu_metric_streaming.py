@@ -116,11 +116,7 @@ def _qr(psi, vertical):
 @pytest.mark.parametrize('which', ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++', 'Ladder2'])
 @pytest.mark.parametrize('vertical', [False, True])
 @pytest.mark.parametrize('sym', ['dense', 'U1', 'SU2'])
-def test_streamed_metric(config_kwargs, which, vertical, sym, request):
-    if sym == 'SU2' and which == 'Ladder2':
-        request.node.add_marker(pytest.mark.xfail(
-            strict=True, raises=yastn.YastnError,
-            reason='Existing full SU2 Ladder2 metric has incompatible QR signatures.'))
+def test_streamed_metric(config_kwargs, which, vertical, sym):
     psi, _ = _state(config_kwargs, sym)
     Q0, Q1, R0, R1, s0, s1, dirn = _qr(psi, vertical)
     full = fpeps.EnvNTU(psi, which=which).bond_metric(Q0, Q1, s0, s1, dirn).g

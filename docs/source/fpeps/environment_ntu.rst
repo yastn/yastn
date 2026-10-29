@@ -7,6 +7,12 @@ Neighborhood tensor update environments
 .. autoclass:: yastn.tn.fpeps.EnvNTU
     :members: bond_metric
 
+``which='LadderN'`` contracts a ladder with ``N >= 1`` environment layers
+on either side of the updated bond, for horizontal and vertical bonds.
+``Ladder1`` is the NN environment; ``Ladder`` is an alias for ``Ladder2``.
+The ladder supports Abelian and non-Abelian symmetries, including SU2 and
+SU2xU1, with either the full metric or ``metric_chunk_size`` streaming.
+
 Streaming the metric
 --------------------
 
@@ -40,8 +46,6 @@ All NTU environment sizes support this mode. NN gates and multi-site MPO
 paths, including NNN gates through an intermediate site, use the same
 streaming implementation at each truncated bond. ``which='NNN'`` specifies
 the environment size and is independent of the range of the gate.
-The existing SU(2) ``Ladder2`` signature incompatibility also affects
-streaming; use one of the six standard NTU environments for SU(2).
 For purification gates, use ``default_fusion='hard'``: the existing
 ``match_ancilla`` path does not handle meta-fused physical legs.
 
