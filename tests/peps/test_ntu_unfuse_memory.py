@@ -13,6 +13,7 @@ from yastn.backend import backend_torch
 @pytest.mark.parametrize('corner', ['tl', 'br', 'tr', 'bl'])
 @pytest.mark.parametrize('open_physical', [False, True])
 def test_append_combines_unfusions(config_kwargs, sym, corner, open_physical, monkeypatch):
+    monkeypatch.setattr(merging, '_USE_STREAMED_NONABELIAN_FUSION', True)
     monkeypatch.setattr(merging, '_NONABELIAN_FUSION_MIN_SIZE', 0)
     config = yastn.make_config(**{**config_kwargs, 'backend': 'torch'}, sym=sym)
     charges = (0, 1, 2) if sym == 'SU2' else ((0, 0), (1, 1), (2, 2))

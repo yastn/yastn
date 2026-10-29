@@ -166,6 +166,7 @@ def test_inherited_optimizations(oracle_backend, monkeypatch):
     leg = yastn.Leg(config, t=(0, 1, 2), D=(1, 2, 1))
     a = yastn.rand(config, legs=(leg, leg.conj()) * 2)
     expected = a.fuse_legs(((0, 3), (1, 2)), mode='hard')
+    monkeypatch.setattr(_merging, '_USE_STREAMED_NONABELIAN_FUSION', True)
     monkeypatch.setattr(_merging, '_NONABELIAN_FUSION_MIN_SIZE', 0)
     calls = []
     original = backend.recouple_and_fuse

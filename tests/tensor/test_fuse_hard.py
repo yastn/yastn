@@ -103,6 +103,30 @@ def test_fuse_hard_SU2_two_groups_after_recoupling(config_kwargs):
     assert restored.ndim == 2
     assert all(leg.is_fused() for leg in restored.get_legs())
 
+
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+@pytest.mark.parametrize('groups', [((0, 1), 2, 3), (2, (0, 3), 1), ((0, 2), (1, 3))])
+def test_nonabelian_fusion_streaming_disabled(config_kwargs, sym, groups, monkeypatch):
+    """Default fuse/unfuse must bypass streaming even above its size threshold."""
+    from yastn.tensor import _merging as merging
+
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = four_leg_tensor(config)
+    assert not merging._USE_STREAMED_NONABELIAN_FUSION
+    monkeypatch.setattr(merging, '_NONABELIAN_FUSION_MIN_SIZE', 0)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Default fuse/unfuse called a streamed backend kernel')
+
+    for name in ('recouple_and_merge', 'recouple_and_fuse', 'recouple_and_unfuse'):
+        monkeypatch.setattr(config.backend, name, forbidden, raising=False)
+    fused = a.fuse_legs(groups, mode='hard')
+    assert fused.size > 0 and fused.nblocks > 1
+    restored = fused.unfuse_legs(tuple(range(fused.ndim)))
+    order = tuple(i for group in groups for i in (group if isinstance(group, tuple) else (group,)))
+    assert (restored - a.transpose(order)).norm() < 1e-12
+
+
 # On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
 pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
 

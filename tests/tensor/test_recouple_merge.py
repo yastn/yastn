@@ -10,6 +10,7 @@ from yastn.tensor import _merging as merging
 @pytest.fixture(autouse=True)
 def exercise_streamed_fusion(monkeypatch):
     # Exercise the memory-saving path with small independent numerical oracles.
+    monkeypatch.setattr(merging, '_USE_STREAMED_NONABELIAN_FUSION', True)
     monkeypatch.setattr(merging, '_NONABELIAN_FUSION_MIN_SIZE', 0)
 
 

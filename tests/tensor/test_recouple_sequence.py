@@ -45,7 +45,8 @@ def test_recouple_sequence_adjoint(config_kwargs, dtype, channels):
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
 @pytest.mark.parametrize('masked', [False, True])
-def test_raw_plans_use_one_output(config_kwargs, sym, masked, monkeypatch):
+@pytest.mark.parametrize('threshold_offset', [0, 1], ids=['at_threshold', 'below_threshold'])
+def test_raw_plans_size_threshold(config_kwargs, sym, masked, threshold_offset, monkeypatch):
     config = yastn.make_config(sym=sym, **config_kwargs)
     charges = (0, 1, 2) if sym == 'SU2' else ((0, 0), (1, 1), (1, -1))
     leg = yastn.Leg(config, s=1, t=charges, D=(1, 2, 1))
@@ -66,11 +67,14 @@ def test_raw_plans_use_one_output(config_kwargs, sym, masked, monkeypatch):
             source -= 1
     assert len(plans) > 1 and all(plan[2] for plan in plans)
     monkeypatch.setattr(merging, '_meta_fusion_tree_transpose', lambda *args: tuple(plans))
+    # Exercise the exact boundary with small correctness fixtures.
+    monkeypatch.setattr(merging, '_RECOUPLE_SEQUENCE_MAX_SIZE', a.size + threshold_offset)
 
-    def forbid_raw(*args):
-        raise AssertionError('A raw full-size intermediate recoupling was allocated')
+    def forbid_other_path(*args):
+        raise AssertionError('Recoupling used the wrong path for the input size')
 
-    monkeypatch.setattr(config.backend, 'recouple', forbid_raw)
+    forbidden = 'recouple' if threshold_offset else 'recouple_sequence'
+    monkeypatch.setattr(config.backend, forbidden, forbid_other_path)
     found = merging._apply_fusion_tree_transpose(a, order)
     assert found.size > 0 and found.struct == expected.struct and found.hfs == expected.hfs
     np.testing.assert_allclose(config.backend.to_numpy(found.data), config.backend.to_numpy(expected.data),

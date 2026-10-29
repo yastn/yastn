@@ -36,9 +36,15 @@ if TYPE_CHECKING:
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion']
 
-# Small tensors benefit from the existing batched recoupling/index kernels.
-# Use direct block writes once full intermediates become material allocations.
+# Streamed fuse/unfuse trades intermediate buffers for block-wise composition,
+# which can severely increase runtime. Keep it disabled in normal execution;
+# dedicated tests explicitly enable it to retain numerical coverage.
+_USE_STREAMED_NONABELIAN_FUSION = False
 _NONABELIAN_FUSION_MIN_SIZE = 1 << 20
+
+# Limit streamed transpose composition to small inputs. This element-count
+# heuristic bounds its use until a workload-based cost model is available.
+_RECOUPLE_SEQUENCE_MAX_SIZE = 1 << 20
 
 
 class _LegSlices(NamedTuple):
@@ -240,15 +246,16 @@ def _fuse_legs_hard(a, axes, order):
 
 
 def _fuse_disjoint_nonabelian_groups(a, axes):
-    """Build sibling hard-fusion subtrees, composing large-tensor operations.
+    """Build sibling hard-fusion subtrees one at a time by default.
 
     A canonical left-associated flat channel can expose only one requested
     subtree at a time.  Sequentially moving every group to the prefix and
     hard-fusing it stores that subtree's outgoing irrep in its effective leg,
     so no channel information is discarded when the next group is built.
-    The composed path plans these operations without intermediate data.
+    The experimental composed path plans these without intermediate data.
     """
-    fused_kernel = (getattr(a.config.backend, 'recouple_and_merge', None) is not None
+    fused_kernel = (_USE_STREAMED_NONABELIAN_FUSION
+                    and getattr(a.config.backend, 'recouple_and_merge', None) is not None
                     and a.size >= _NONABELIAN_FUSION_MIN_SIZE)
     if sum(len(group) > 1 for group in axes) == 1 and fused_kernel:
         return _fuse_single_nonabelian_group(a, axes)
@@ -425,15 +432,15 @@ def _apply_fusion_tree_transpose(a, order):
     if order == tuple(range(a.ndim_n)):
         return a
     plans = _meta_fusion_tree_transpose(a.config.sym, a.struct, order)
-    if len(plans) > 1:
-        # The global sparse product can exceed the metadata budget. Compose
-        # one destination block at a time instead of materializing every raw
-        # step's full tensor. Only the final output needs a data allocation.
+    if len(plans) > 1 and a.size < _RECOUPLE_SEQUENCE_MAX_SIZE:
         steps = tuple((plan[1], plan[2]) for plan in plans)
         data = a.config.backend.recouple_sequence(a._data, steps, plans[-1][3])
         return a._replace(struct=plans[-1][0], data=data,
                           hfs=tuple(a.hfs[i] for i in order),
                           mfs=((1,),) * a.ndim_n, trans=None)
+    # Multiple plans mean composition exceeded the work or metadata budget.
+    # For large inputs, retain that sequential fallback instead of recomposing
+    # the same product block by block in recouple_sequence.
     for plan in plans:
         a = _apply_recoupling(a, *plan)
     return a
@@ -1007,7 +1014,8 @@ def unfuse_legs(a, axes) -> 'Tensor':
         hard_axes = tuple(ax for ax in axes
                           if a.mfs[ax][0] == 1
                           and a.hfs[a.trans[ax]].tree[0] > 1)
-        if (len(hard_axes) > 1 and len(set(axes)) == len(axes)
+        if (_USE_STREAMED_NONABELIAN_FUSION
+                and len(hard_axes) > 1 and len(set(axes)) == len(axes)
                 and a.trans == tuple(range(a.ndim_n)) and all(mf == (1,) for mf in a.mfs)
                 and a.size >= _NONABELIAN_FUSION_MIN_SIZE
                 and getattr(a.config.backend, 'recouple_and_unfuse', None) is not None):
@@ -1116,7 +1124,8 @@ def _unfuse_nonabelian_axis(a, axis):
     """Expose one hard-fused subtree at the prefix, unfuse, and restore order."""
     if axis == 0:
         return unfuse_legs(a, 0)
-    if (getattr(a.config.backend, 'recouple_and_merge', None) is not None
+    if (_USE_STREAMED_NONABELIAN_FUSION
+            and getattr(a.config.backend, 'recouple_and_merge', None) is not None
             and a.size >= _NONABELIAN_FUSION_MIN_SIZE
             and a.trans == tuple(range(a.ndim_n)) and all(mf == (1,) for mf in a.mfs)):
         return _unfuse_nonabelian_axis_streamed(a, axis)
@@ -1168,7 +1177,8 @@ def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_thre
     if axes_trim:
         old_struct = struct
         meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm, lazy_threshold)
-        if (not getattr(config.sym, 'IS_ABELIAN', True)
+        if (_USE_STREAMED_NONABELIAN_FUSION
+                and not getattr(config.sym, 'IS_ABELIAN', True)
                 and getattr(config.backend, 'recouple_and_merge', None) is not None
                 and size >= _NONABELIAN_FUSION_MIN_SIZE):
             from ._nonabelian import fusion_weights
