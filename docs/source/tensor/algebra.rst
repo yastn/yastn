@@ -101,9 +101,9 @@ Packing duplicates reduced blocks that contribute more than once. Products are
 partitioned into batches before packing, and each batch's result is accumulated
 into the final output, including channels shared by multiple batches.
 ``YASTN_CUTENSOR_PACK_CHUNK_BYTES`` sets the positive byte budget for packed
-A+B+C per call (default: 1 GiB). Large CUDA contractions reduce that budget to
+A+B+C per call (default: 16 GiB). Large CUDA contractions reduce that budget to
 at most ``1 / YASTN_CUTENSOR_PACK_DIVISOR`` of available memory after allowing
-for the final output (default divisor: 8; lower it to trade memory for speed).
+for the final output (default divisor: 4; lower it to trade memory for speed).
 
 Setting ``YASTN_MEMORY_OVERRIDE=1`` disables these memory guards globally for
 the CUDA backends: the packing-budget divisor, the adaptive fusion scatter

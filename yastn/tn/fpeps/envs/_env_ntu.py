@@ -30,7 +30,7 @@ from ....tensor._tests import _unpack_trans_test_axes_pair
 
 # Target size of the selected boundary vector, not a bound on total memory.
 # Closing each selection immediately also avoids the full append output.
-_NNN_APPEND_CHUNK_BYTES = 4 << 30
+_NNN_APPEND_CHUNK_BYTES = 16 << 30
 
 
 def _nnn_vector_ranges(vector, axis, budget):
@@ -138,7 +138,7 @@ class EnvNTU:
             Large hard-fused NNN boundary vectors use internal chunks
             independently of this setting, including when it is None.
             Set ``YASTN_NNN_APPEND_CHUNK_BYTES`` to a positive integer number
-            of bytes to change their input chunk target (default: 4 GiB).
+            of bytes to change their input chunk target (default: 16 GiB).
             It is read on each append call and does not bound total memory.
 
         opts_eat: dict | None

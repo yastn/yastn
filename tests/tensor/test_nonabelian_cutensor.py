@@ -502,12 +502,12 @@ def test_cutensor_recouple_pack_allocation(oracle_backend):
     assert sum(allocations) == packed.numel() * packed.element_size()
 
 def test_pack_budget_divisor_env(monkeypatch):
-    """Invalid or nonpositive divisors fall back to the documented default 8."""
+    """Invalid or nonpositive divisors fall back to the documented default 4."""
     pytest.importorskip('tapp_torch')
     from yastn.backend.backend_torch_cutensor import _pack_budget_divisor
     monkeypatch.delenv('YASTN_CUTENSOR_PACK_DIVISOR', raising=False)
-    assert _pack_budget_divisor() == 8
-    monkeypatch.setenv('YASTN_CUTENSOR_PACK_DIVISOR', '4')
     assert _pack_budget_divisor() == 4
-    monkeypatch.setenv('YASTN_CUTENSOR_PACK_DIVISOR', '0')
+    monkeypatch.setenv('YASTN_CUTENSOR_PACK_DIVISOR', '8')
     assert _pack_budget_divisor() == 8
+    monkeypatch.setenv('YASTN_CUTENSOR_PACK_DIVISOR', '0')
+    assert _pack_budget_divisor() == 4

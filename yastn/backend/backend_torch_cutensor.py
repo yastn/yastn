@@ -209,21 +209,21 @@ def _packed_elements(plan):
 
 
 def _pack_budget_divisor():
-    """Read ``YASTN_CUTENSOR_PACK_DIVISOR`` (default 8); invalid values fall back to 8."""
-    raw = os.environ.get('YASTN_CUTENSOR_PACK_DIVISOR', '8')
+    """Read ``YASTN_CUTENSOR_PACK_DIVISOR`` (default 4); invalid values fall back to 4."""
+    raw = os.environ.get('YASTN_CUTENSOR_PACK_DIVISOR', '4')
     try:
         value = int(raw)
         if value < 1:
             raise ValueError
     except (TypeError, ValueError):
         warnings.warn(f"Ignoring YASTN_CUTENSOR_PACK_DIVISOR={raw!r}: expected a positive integer.")
-        return 8
+        return 4
     return value
 
 
 def _nonabelian_pack_budget(data, plan, dtype):
     """Bound live packing and leave room for cuTENSOR workspace and the output."""
-    setting = os.environ.get('YASTN_CUTENSOR_PACK_CHUNK_BYTES', str(1 << 30))
+    setting = os.environ.get('YASTN_CUTENSOR_PACK_CHUNK_BYTES', str(1 << 34))
     try:
         budget = int(setting)
         if budget <= 0:
