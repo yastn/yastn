@@ -20,6 +20,7 @@ from ._env_contractions import *
 from ._ntu_metric import NTUMetric
 from .._evolution import BondMetric
 from ....tensor import tensordot, YastnError, ncon
+from ...._memory_override import memory_override
 from ....initialize import eye
 from ....tensor._auxiliary import get_blocks
 from ....tensor._contractions import _apply_mask_axes
@@ -64,6 +65,8 @@ def _append_vec_nnn(Ac, A, vector, closing, append, vertical):
     or require a streamed representation of the final metric.
     """
     setting = os.environ.get('YASTN_NNN_APPEND_CHUNK_BYTES', str(_NNN_APPEND_CHUNK_BYTES))
+    if memory_override():
+        setting = str(1 << 62)
     try:
         budget = int(setting)
         if budget <= 0:

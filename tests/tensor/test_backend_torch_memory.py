@@ -376,3 +376,15 @@ def test_adaptive_index_tile_memory_budget(monkeypatch):
     monkeypatch.setattr(torch.cuda, 'mem_get_info', forbidden)
     assert adaptive_index_tile('cuda', 123, 0) == 123
     assert adaptive_index_tile('cuda', 0, 0) == 1
+
+def test_memory_override_switches(monkeypatch):
+    """The global override disables the fusion memory guard and is opt-in."""
+    from yastn._memory_override import memory_override
+    from yastn.backend.backend_torch import _fuse_scatter_chunk
+    monkeypatch.delenv('YASTN_MEMORY_OVERRIDE', raising=False)
+    monkeypatch.delenv('YASTN_FUSE_SCATTER_CHUNK', raising=False)
+    assert not memory_override()
+    assert _fuse_scatter_chunk() is None
+    monkeypatch.setenv('YASTN_MEMORY_OVERRIDE', '1')
+    assert memory_override()
+    assert _fuse_scatter_chunk() == 0

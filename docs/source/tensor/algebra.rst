@@ -104,6 +104,12 @@ into the final output, including channels shared by multiple batches.
 A+B+C per call (default: 1 GiB). Large CUDA contractions reduce that budget to
 at most ``1 / YASTN_CUTENSOR_PACK_DIVISOR`` of available memory after allowing
 for the final output (default divisor: 8; lower it to trade memory for speed).
+
+Setting ``YASTN_MEMORY_OVERRIDE=1`` disables these memory guards globally for
+the CUDA backends: the packing-budget divisor, the adaptive fusion scatter
+(forcing the per-block loop), NNN append chunking, and CUDA cache releases.
+It trades peak GPU memory for speed and should be used only with enough
+headroom.
 Budgets are rounded down to a power of two in elements to reuse metadata.
 This bounds packed storage, not the final output or cuTENSOR workspace.
 A single product exceeding the budget uses Torch's streamed block kernel

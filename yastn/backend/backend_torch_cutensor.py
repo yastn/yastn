@@ -23,6 +23,7 @@ import torch
 import tapp_torch
 from .._cache_registry import register_cache
 from .._profile import nsys_profile
+from .._memory_override import memory_override
 from .backend_torch import *
 from ._backend_torch_backwards import (_project_grad_dtype, _save_contraction_inputs,
                                        kernel_transpose_dot_sum, _transpose_dot_gradient)
@@ -230,7 +231,7 @@ def _nonabelian_pack_budget(data, plan, dtype):
     except ValueError:
         raise ValueError(f'YASTN_CUTENSOR_PACK_CHUNK_BYTES={setting!r}: expected a positive integer.') from None
     itemsize = torch.empty((), dtype=dtype).element_size()
-    if data.is_cuda and _packed_elements(plan) * itemsize > (64 << 20):
+    if data.is_cuda and not memory_override() and _packed_elements(plan) * itemsize > (64 << 20):
         free, _ = torch.cuda.mem_get_info(data.device)
         reusable = torch.cuda.memory_reserved(data.device) - torch.cuda.memory_allocated(data.device)
         available = max(0, free + reusable - plan.size * itemsize)

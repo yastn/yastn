@@ -27,6 +27,7 @@ import torch.multiprocessing as mp
 mp.set_start_method('spawn', force=True) # to avoid issues with ''fork' and sharing CUDA tensors in some environments
 
 from .._cache_registry import register_cache
+from .._memory_override import memory_override
 from .linalg.torch_eig_sym import SYMEIG
 
 
@@ -1260,7 +1261,9 @@ def _fuse_scatter_chunk():
     """
     env = os.environ.get('YASTN_FUSE_SCATTER_CHUNK')
     if env in [None, ""]:
-        return None
+        # Old, larger-memory path: force the per-block loop (the pre-scatter
+        # baseline) when the global override is enabled.
+        return 0 if memory_override() else None
     try:
         val = int(env)
     except ValueError:

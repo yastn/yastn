@@ -29,6 +29,7 @@ except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
 from .._profile import nvtx, nsys_profile
+from .._memory_override import memory_override
 from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter, _apply_charge_swaps_
@@ -636,7 +637,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     #   1 = once per _contract_with_sliced_unroll, before processing combos;
     #   2 = + after processing each combo; 3 = + per tensordot.
     _needs_cache_release = lambda level: \
-        getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor' \
+        not memory_override() \
+        and getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor' \
         and _cache_release_level(os.getenv("YASTN_OE_CUDA_CACHE_RELEASE_LEVEL")) >= level
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
