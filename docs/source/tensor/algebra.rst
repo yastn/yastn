@@ -102,7 +102,8 @@ partitioned into batches before packing, and each batch's result is accumulated
 into the final output, including channels shared by multiple batches.
 ``YASTN_CUTENSOR_PACK_CHUNK_BYTES`` sets the positive byte budget for packed
 A+B+C per call (default: 1 GiB). Large CUDA contractions reduce that budget to
-at most one eighth of available memory after allowing for the final output.
+at most ``1 / YASTN_CUTENSOR_PACK_DIVISOR`` of available memory after allowing
+for the final output (default divisor: 8; lower it to trade memory for speed).
 Budgets are rounded down to a power of two in elements to reuse metadata.
 This bounds packed storage, not the final output or cuTENSOR workspace.
 A single product exceeding the budget uses Torch's streamed block kernel

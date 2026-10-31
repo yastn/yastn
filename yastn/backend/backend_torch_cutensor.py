@@ -207,6 +207,19 @@ def _packed_elements(plan):
                for start, stop in slices)
 
 
+def _pack_budget_divisor():
+    """Read ``YASTN_CUTENSOR_PACK_DIVISOR`` (default 8); invalid values fall back to 8."""
+    raw = os.environ.get('YASTN_CUTENSOR_PACK_DIVISOR', '8')
+    try:
+        value = int(raw)
+        if value < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        warnings.warn(f"Ignoring YASTN_CUTENSOR_PACK_DIVISOR={raw!r}: expected a positive integer.")
+        return 8
+    return value
+
+
 def _nonabelian_pack_budget(data, plan, dtype):
     """Bound live packing and leave room for cuTENSOR workspace and the output."""
     setting = os.environ.get('YASTN_CUTENSOR_PACK_CHUNK_BYTES', str(1 << 30))
@@ -221,7 +234,7 @@ def _nonabelian_pack_budget(data, plan, dtype):
         free, _ = torch.cuda.mem_get_info(data.device)
         reusable = torch.cuda.memory_reserved(data.device) - torch.cuda.memory_allocated(data.device)
         available = max(0, free + reusable - plan.size * itemsize)
-        budget = min(budget, max(itemsize, available // 8))
+        budget = min(budget, max(itemsize, available // _pack_budget_divisor()))
     # Quantize to keep dynamic free-memory fluctuations from filling the cache.
     elements = max(1, int(budget) // itemsize)
     return 1 << (elements.bit_length() - 1)
