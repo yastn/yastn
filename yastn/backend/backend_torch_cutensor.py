@@ -37,6 +37,53 @@ from tapp_torch.ops import descriptor_cache_stats, plan_cache_stats
 _PACK_CHUNK = 1 << 20
 
 
+def _legacy_nonabelian():
+    """Use the old one-shot non-Abelian packing path when requested by the environment."""
+    return os.environ.get('YASTN_CUTENSOR_LEGACY_NONABELIAN', '0').lower() in ('1', 'true', 'yes', 'on')
+
+
+def _pack_legacy(data, slices, coefficients=(), dtype=None):
+    """One-shot pack in the pre-04d83355 style: full gather, no element chunking."""
+    dtype = data.dtype if dtype is None else dtype
+    parameters = _packing_parameters(slices, data.device)
+    if parameters[3]:
+        packed = data[:parameters[2]].to(dtype=dtype)
+    else:
+        indices, _ = _packing_indices(parameters, 0, parameters[2])
+        packed = data[indices].to(dtype=dtype)
+    if coefficients and any(value != 1 for value in coefficients):
+        real_dtype = torch.empty((), dtype=dtype).real.dtype
+        weights = _coefficients(coefficients, real_dtype, data.device)
+        lengths = torch.tensor([stop - start for start, stop in slices],
+                               dtype=torch.int64, device=data.device)
+        packed = packed * torch.repeat_interleave(weights, lengths, output_size=parameters[2])
+    return packed
+
+
+def _unpack_legacy(data, slices, size):
+    """One-shot unpack counterpart of :func:`_pack_legacy`."""
+    parameters = _packing_parameters(slices, data.device)
+    if parameters[3] and parameters[2] == size:
+        return data
+    indices, _ = _packing_indices(parameters, 0, parameters[2])
+    return data.new_zeros(size).index_copy_(0, indices, data)
+
+
+def _pack_element_chunk():
+    """Element-count chunk for pack/unpack maps; override lifts it to 2**28."""
+    raw = os.environ.get('YASTN_CUTENSOR_PACK_CHUNK_ELEMENTS')
+    if raw not in (None, ''):
+        try:
+            value = int(raw)
+            if value < 1:
+                raise ValueError
+            return value
+        except (TypeError, ValueError):
+            warnings.warn(f"Ignoring YASTN_CUTENSOR_PACK_CHUNK_ELEMENTS={raw!r}: "
+                          "expected a positive integer.")
+    return (1 << 28) if memory_override() else _PACK_CHUNK
+
+
 @register_cache(key='cutensor_nonabelian_packing')
 @lru_cache(maxsize=128)
 def _packing_parameters(slices, device):
@@ -72,8 +119,9 @@ class _Pack(torch.autograd.Function):
     def forward(data, parameters, weights, dtype):
         size = parameters[2]
         result = torch.empty(size, dtype=dtype, device=data.device)
-        for lo in range(0, size, _PACK_CHUNK):
-            hi = min(lo + _PACK_CHUNK, size)
+        chunk = _pack_element_chunk()
+        for lo in range(0, size, chunk):
+            hi = min(lo + chunk, size)
             indices, blocks = _packing_indices(parameters, lo, hi)
             values = data[indices].to(dtype=dtype)
             if weights is not None:
@@ -97,8 +145,9 @@ def _pack_adjoint(gradient, parameters, weights, input_size, input_dtype, out=No
     # Sum repeated slices at the promoted precision before projecting back.
     dtype = gradient.dtype if input_dtype.is_complex else gradient.real.dtype
     result = torch.zeros(input_size, dtype=dtype, device=gradient.device) if out is None else out
-    for lo in range(0, gradient.numel(), _PACK_CHUNK):
-        hi = min(lo + _PACK_CHUNK, gradient.numel())
+    chunk = _pack_element_chunk()
+    for lo in range(0, gradient.numel(), chunk):
+        hi = min(lo + chunk, gradient.numel())
         indices, blocks = _packing_indices(parameters, lo, hi)
         values = gradient[lo:hi]
         if weights is not None:
@@ -112,8 +161,9 @@ class _Unpack(torch.autograd.Function):
     @staticmethod
     def forward(data, parameters, size):
         result = data.new_zeros(size)
-        for lo in range(0, data.numel(), _PACK_CHUNK):
-            hi = min(lo + _PACK_CHUNK, data.numel())
+        chunk = _pack_element_chunk()
+        for lo in range(0, data.numel(), chunk):
+            hi = min(lo + chunk, data.numel())
             indices, blocks = _packing_indices(parameters, lo, hi)
             result.index_copy_(0, indices, data[lo:hi])
             del indices, blocks
@@ -231,7 +281,9 @@ def _nonabelian_pack_budget(data, plan, dtype):
     except ValueError:
         raise ValueError(f'YASTN_CUTENSOR_PACK_CHUNK_BYTES={setting!r}: expected a positive integer.') from None
     itemsize = torch.empty((), dtype=dtype).element_size()
-    if data.is_cuda and not memory_override() and _packed_elements(plan) * itemsize > (64 << 20):
+    if memory_override():
+        budget = 1 << 62
+    elif data.is_cuda and _packed_elements(plan) * itemsize > (64 << 20):
         free, _ = torch.cuda.mem_get_info(data.device)
         reusable = torch.cuda.memory_reserved(data.device) - torch.cuda.memory_allocated(data.device)
         available = max(0, free + reusable - plan.size * itemsize)
@@ -399,6 +451,15 @@ def tensordot_nonabelian(Adata, Bdata, plan, steps_a=(), steps_b=()):
         # Keep a zero derivative for both inputs, including empty tensors.
         return (Adata.new_zeros(plan.size, dtype=dtype)
                 + Adata[:0].sum() + Bdata[:0].sum())
+    if _legacy_nonabelian() and not steps_a and not steps_b:
+        # Old one-shot path: all products are packed into contiguous buffers and
+        # a single cuTENSOR call is made. Trades peak memory for speed.
+        packed_a = _pack_legacy(Adata, plan.slices_a, plan.coefficients, dtype)
+        packed_b = _pack_legacy(Bdata, plan.slices_b, dtype=dtype)
+        descriptors = [arg for descriptor in plan.descriptors for arg in descriptor]
+        packed_c = tensordot_bs_v2(packed_a, packed_b, [1], [0], *descriptors,
+                                   [0, 1], list(plan.hashes))
+        return _unpack_legacy(packed_c, plan.slices_c, plan.size)
     from ._recoupling import recoupling_sequence_plan, unfuse_sequence_plan
     recouplings = []
     for steps, slices, shapes in ((steps_a, plan.slices_a, plan.shapes_a),

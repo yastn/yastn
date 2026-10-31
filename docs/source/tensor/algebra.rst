@@ -110,6 +110,13 @@ the CUDA backends: the packing-budget divisor, the adaptive fusion scatter
 (forcing the per-block loop), NNN append chunking, and CUDA cache releases.
 It trades peak GPU memory for speed and should be used only with enough
 headroom.
+
+``YASTN_CUTENSOR_LEGACY_NONABELIAN=1`` selects the pre-``04d83355`` one-shot
+non-Abelian cuTENSOR path: all products are packed into contiguous buffers and
+contracted in a single cuTENSOR call, without channel batching or recoupled
+packing. It is opt-in (default ``0``). For large tensors and late imaginary
+times it trades peak GPU memory for speed; use it only when the device has
+enough memory for the old packing peak.
 Budgets are rounded down to a power of two in elements to reuse metadata.
 This bounds packed storage, not the final output or cuTENSOR workspace.
 A single product exceeding the budget uses Torch's streamed block kernel
