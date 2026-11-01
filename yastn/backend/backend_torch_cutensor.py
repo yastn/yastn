@@ -37,38 +37,6 @@ from tapp_torch.ops import descriptor_cache_stats, plan_cache_stats
 _PACK_CHUNK = 1 << 20
 
 
-def _legacy_nonabelian():
-    """Use the old one-shot non-Abelian packing path when requested by the environment."""
-    return os.environ.get('YASTN_CUTENSOR_LEGACY_NONABELIAN', '0').lower() in ('1', 'true', 'yes', 'on')
-
-
-def _pack_legacy(data, slices, coefficients=(), dtype=None):
-    """One-shot pack in the pre-04d83355 style: full gather, no element chunking."""
-    dtype = data.dtype if dtype is None else dtype
-    parameters = _packing_parameters(slices, data.device)
-    if parameters[3]:
-        packed = data[:parameters[2]].to(dtype=dtype)
-    else:
-        indices, _ = _packing_indices(parameters, 0, parameters[2])
-        packed = data[indices].to(dtype=dtype)
-    if coefficients and any(value != 1 for value in coefficients):
-        real_dtype = torch.empty((), dtype=dtype).real.dtype
-        weights = _coefficients(coefficients, real_dtype, data.device)
-        lengths = torch.tensor([stop - start for start, stop in slices],
-                               dtype=torch.int64, device=data.device)
-        packed = packed * torch.repeat_interleave(weights, lengths, output_size=parameters[2])
-    return packed
-
-
-def _unpack_legacy(data, slices, size):
-    """One-shot unpack counterpart of :func:`_pack_legacy`."""
-    parameters = _packing_parameters(slices, data.device)
-    if parameters[3] and parameters[2] == size:
-        return data
-    indices, _ = _packing_indices(parameters, 0, parameters[2])
-    return data.new_zeros(size).index_copy_(0, indices, data)
-
-
 def _pack_element_chunk():
     """Element-count chunk for pack/unpack maps; override lifts it to 2**28."""
     raw = os.environ.get('YASTN_CUTENSOR_PACK_CHUNK_ELEMENTS')
@@ -451,15 +419,6 @@ def tensordot_nonabelian(Adata, Bdata, plan, steps_a=(), steps_b=()):
         # Keep a zero derivative for both inputs, including empty tensors.
         return (Adata.new_zeros(plan.size, dtype=dtype)
                 + Adata[:0].sum() + Bdata[:0].sum())
-    if _legacy_nonabelian() and not steps_a and not steps_b:
-        # Old one-shot path: all products are packed into contiguous buffers and
-        # a single cuTENSOR call is made. Trades peak memory for speed.
-        packed_a = _pack_legacy(Adata, plan.slices_a, plan.coefficients, dtype)
-        packed_b = _pack_legacy(Bdata, plan.slices_b, dtype=dtype)
-        descriptors = [arg for descriptor in plan.descriptors for arg in descriptor]
-        packed_c = tensordot_bs_v2(packed_a, packed_b, [1], [0], *descriptors,
-                                   [0, 1], list(plan.hashes))
-        return _unpack_legacy(packed_c, plan.slices_c, plan.size)
     from ._recoupling import recoupling_sequence_plan, unfuse_sequence_plan
     recouplings = []
     for steps, slices, shapes in ((steps_a, plan.slices_a, plan.shapes_a),

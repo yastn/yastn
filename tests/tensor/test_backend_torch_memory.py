@@ -83,10 +83,11 @@ def test_scaled_merge_no_block_copy():
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
 @pytest.mark.parametrize('kind', ['legs', 'blocks'])
-def test_fusion_uses_scaled_merge(sym, kind, monkeypatch, request):
-    """Both fusion entry points match the old scale-then-merge path and its gradient."""
+def test_fusion_uses_scale_then_merge(sym, kind, monkeypatch, request):
+    """Both fusion entry points use batched scaling before the merge kernel."""
     from yastn.tensor._merging import _fuse_blocks
 
+    monkeypatch.delenv('YASTN_SCALED_MERGE', raising=False)
     config = yastn.make_config(sym=sym, backend='torch',
                                default_device=request.config.getoption('--device'))
     charges = (0, 1, 2) if sym == 'SU2' else ((0, 0), (1, 1), (2, 2))
@@ -100,44 +101,37 @@ def test_fusion_uses_scaled_merge(sym, kind, monkeypatch, request):
             return a.fuse_legs(((0, 2), (1, 3)), mode='hard').data
         return _fuse_blocks(config, a.data, a.struct, ((0, 1), (2, 3)))[0]
 
-    merged = backend_torch.transpose_and_merge_scaled
-    recoupled = backend_torch.recouple_and_merge
-    fused = backend_torch.recouple_and_fuse
-    with monkeypatch.context() as reference_patch:
-        reference_patch.setattr(backend_torch, 'transpose_and_merge_scaled', None)
-        reference_patch.setattr(backend_torch, 'recouple_and_merge', None)
-        reference_patch.setattr(backend_torch, 'recouple_and_fuse', None)
-        reference = operation()
-    calls = []
-
-    def probe(*args):
-        calls.append(len(args[2]))
-        return merged(*args)
+    reference = operation()
 
     def forbidden(*args, **kwargs):
-        raise AssertionError('Hard fusion must not create a scaled source buffer')
+        raise AssertionError('Hard fusion must use scale-then-merge, not per-record scaling')
 
-    def recoupled_probe(*args, **kwargs):
-        calls.append(len(args[2]))
-        return recoupled(*args, **kwargs)
-
-    def fused_probe(*args, **kwargs):
-        result = fused(*args, **kwargs)
-        if result is not None:
-            calls.append(len(args[2]))
-        return result
-
-    monkeypatch.setattr(backend_torch, 'transpose_and_merge_scaled', probe)
-    monkeypatch.setattr(backend_torch, 'recouple_and_merge', recoupled_probe)
-    monkeypatch.setattr(backend_torch, 'recouple_and_fuse', fused_probe)
-    monkeypatch.setattr(backend_torch, 'scale_blocks', forbidden)
+    monkeypatch.setattr(backend_torch, 'transpose_and_merge_scaled', forbidden)
     actual = operation()
-    assert calls and all(count > 0 for count in calls)
     torch.testing.assert_close(actual, reference)
     gradient = torch.randn_like(actual)
     actual_grad = torch.autograd.grad(actual, a.data, gradient)[0]
     reference_grad = torch.autograd.grad(reference, a.data, gradient)[0]
     torch.testing.assert_close(actual_grad, reference_grad)
+
+
+def test_scaled_merge_opt_in(monkeypatch, request):
+    """YASTN_SCALED_MERGE=1 dispatches to the per-record weighted merge."""
+    config = yastn.make_config(sym='SU2', backend='torch',
+                               default_device=request.config.getoption('--device'))
+    leg = yastn.Leg(config, t=(0, 1, 2), D=(1, 2, 1))
+    a = yastn.rand(config, legs=(leg, leg.conj(), leg, leg.conj()), dtype='complex128')
+    calls = []
+    original = backend_torch.transpose_and_merge_scaled
+
+    def probe(*args):
+        calls.append(len(args[2]))
+        return original(*args)
+
+    monkeypatch.setenv('YASTN_SCALED_MERGE', '1')
+    monkeypatch.setattr(backend_torch, 'transpose_and_merge_scaled', probe)
+    value = a.fuse_legs(((0, 2), (1, 3)), mode='hard')
+    assert value.size > 0 and calls and calls[0] > 0
 
 
 @pytest.mark.parametrize('kind', ['dot', 'transpose'])

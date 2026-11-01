@@ -2,6 +2,7 @@
 from array import array
 from collections import namedtuple
 from functools import lru_cache
+import os
 import numpy as np
 import opt_einsum
 from .._cache_registry import register_cache
@@ -278,11 +279,24 @@ def fusion_scale_inplace(config, data, struct, fused, axes, meta):
     return scale_inplace(data, tuple(weights), tuple(lengths), True)
 
 
+def _scaled_merge_enabled():
+    """Opt in to the memory-saving per-record weighted merge kernel."""
+    return os.environ.get('YASTN_SCALED_MERGE', '0').lower() in ('1', 'true', 'yes', 'on')
+
+
 def fusion_transpose_and_merge(config, data, struct, fused, axes, order, meta, size):
-    """Apply fusion weights while writing merged blocks when the backend supports it."""
+    """Scale fusion weights, then merge with the batched transpose kernel.
+
+    The per-record ``transpose_and_merge_scaled`` variant saves one full-sized
+    scaled source buffer, but on the high-beta triangular t-J workload its
+    Python/Torch call overhead is about 1.7x the total fusion time. Keep the
+    batched scaling path as the default; set ``YASTN_SCALED_MERGE=1`` to opt
+    into the scaled kernel for memory-constrained CTMRG or large-window
+    contractions.
+    """
     if not getattr(config.sym, 'IS_ABELIAN', True):
         merge_scaled = getattr(config.backend, 'transpose_and_merge_scaled', None)
-        if merge_scaled is not None:
+        if merge_scaled is not None and _scaled_merge_enabled():
             weights, lengths = fusion_weights(config.sym, struct, fused, axes, meta)
             return merge_scaled(data, order, meta, size, tuple(weights), tuple(lengths))
         data = fusion_scale(config, data, struct, fused, axes, meta)

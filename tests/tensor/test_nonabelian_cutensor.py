@@ -511,12 +511,3 @@ def test_pack_budget_divisor_env(monkeypatch):
     assert _pack_budget_divisor() == 8
     monkeypatch.setenv('YASTN_CUTENSOR_PACK_DIVISOR', '0')
     assert _pack_budget_divisor() == 4
-
-def test_legacy_nonabelian_env(monkeypatch):
-    """The one-shot non-Abelian path is opt-in and off by default."""
-    pytest.importorskip('tapp_torch')
-    from yastn.backend.backend_torch_cutensor import _legacy_nonabelian
-    monkeypatch.delenv('YASTN_CUTENSOR_LEGACY_NONABELIAN', raising=False)
-    assert not _legacy_nonabelian()
-    monkeypatch.setenv('YASTN_CUTENSOR_LEGACY_NONABELIAN', '1')
-    assert _legacy_nonabelian()
