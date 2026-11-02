@@ -171,6 +171,7 @@ def scale(sym, charges, signs, total):
     return 1.
 
 
+@register_cache(key='nonabelian_intertwiner')
 @lru_cache(maxsize=4096)
 def intertwiner(sym, charges, signs, total, channel):
     from ._contractions import _fusion_intertwiner

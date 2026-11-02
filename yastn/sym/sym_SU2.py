@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from numbers import Integral
 from functools import lru_cache
+from .._cache_registry import register_cache
 from math import factorial, sqrt
 
 import numpy as np
@@ -90,6 +91,7 @@ class sym_SU2(sym_nonabelian):
         return factorial(x // 2) if x >= 0 and x % 2 == 0 else 0
 
     @classmethod
+    @register_cache(key='su2_clebsch_gordan')
     @lru_cache(maxsize=None)
     def clebsch_gordan(cls, j1, m1, j2, m2, J, M):
         """Condon--Shortley ``<j1 m1,j2 m2|J M>`` using doubled labels."""
@@ -115,6 +117,7 @@ class sym_SU2(sym_nonabelian):
         return sqrt(numerator / denominator) * total
 
     @classmethod
+    @register_cache(key='su2_wigner_6j')
     @lru_cache(maxsize=None)
     def wigner_6j(cls, j1, j2, j12, j3, J, j23):
         """Wigner 6-j symbol ``{j1 j2 j12; j3 J j23}`` (doubled labels)."""

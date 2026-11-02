@@ -18,6 +18,7 @@ from __future__ import annotations
 import abc
 import os
 from functools import lru_cache
+from .._cache_registry import register_cache
 from numbers import Number
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -40,6 +41,7 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask',
 _NONABELIAN_RECOUPLE_MIN_SIZE = 1 << 20
 
 
+@register_cache(key='fusion_intertwiner')
 @lru_cache(maxsize=4096)
 def _fusion_intertwiner(sym, charges, signatures, total, channel):
     """Dense normalized CG tree for one reduced non-Abelian block."""
@@ -86,6 +88,7 @@ def _split_channel_flat(channel, nsym):
     return tuple(tuple(channel[n:n + nsym]) for n in range(0, len(channel), nsym))
 
 
+@register_cache(key='contraction_recoupling')
 @lru_cache(maxsize=4096)
 def _contraction_recoupling(sym, charges_a, signs_a, total_a, channel_a,
                             charges_b, signs_b, total_b, channel_b,
@@ -753,6 +756,7 @@ def _matched_pair_indices(unique_a, count_a, arg_a, unique_b, count_b, arg_b):
     return arg_a[ind_a], arg_b[ind_b]
 
 
+@register_cache(key='match_legs_tensordot')
 @lru_cache(maxsize=1024)
 @nsys_profile
 def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):

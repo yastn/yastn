@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """
-Registry of ``lru_cache``-d functions that live in optional backend modules.
+Registry of ``lru_cache``-d functions and symmetry class methods.
 
 :mod:`yastn.tensor._control_lru` drives the cache-control API from an explicit list of
 the pure-Python tensor modules, which are always importable. Backend modules are not.
@@ -21,28 +21,57 @@ Instead, they register their own caches when *they* are imported, which is exact
 that backend is in use. ``_control_lru`` then drives the registry without knowing which
 backends exist.
 
-Entries hold ``(module_name, attr)`` strings rather than function objects, because
+Entries hold ``(module_name, qualified_name)`` strings rather than function objects, because
 :func:`set_registered_maxsize` rebinds the module attribute to a fresh wrapper.
 """
 from __future__ import annotations
 
 import sys
+from collections import namedtuple
 from functools import lru_cache
 
-__all__ = ['register_cache']
+__all__ = ['register_cache', 'register_cache_group']
 
-#: Registered caches as ``(module_name, attr, info_key)``.
+#: Registered caches as ``(module_name, qualified_name, info_key)``.
 _REGISTRY: list[tuple[str, str, str]] = []
 
-#: ``maxsize`` of the most recent :func:`set_registered_maxsize`, or ``None`` if the user
+# Non-LRU caches owned by optional process-pool modules. Hooks inspect only
+# current-process metadata; they must not create pools or contact workers.
+_CACHE_GROUPS = []
+CacheInfo = namedtuple('CacheInfo', 'hits misses maxsize currsize')
+
+
+def register_cache_group(clear, info):
+    """Register clear/info hooks for caches with their own capacity policy."""
+    _CACHE_GROUPS.append((clear.__module__, clear.__name__, info.__name__))
+
+
+def clear_cache_groups():
+    for module_name, clear, _ in _CACHE_GROUPS:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            getattr(module, clear)()
+
+
+def cache_groups_info():
+    result = {}
+    for module_name, _, info in _CACHE_GROUPS:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            result.update(getattr(module, info)())
+    return result
+
+
+#: ``maxsize`` of the most recent :func:`set_registered_maxsize`, or ``_UNSET`` if the user
 #: has not called ``set_cache_maxsize``. Re-applied to backends that register later, so a
 #: backend loaded *after* ``set_cache_maxsize`` still gets the requested size.
-_MAXSIZE = None
+_UNSET = object()
+_MAXSIZE = _UNSET
 
 
 def register_cache(func=None, *, key=None):
     """
-    Mark an ``lru_cache``-d backend function for the yastn cache-control API
+    Mark an ``lru_cache``-d function for the yastn cache-control API
     (:func:`yastn.set_cache_maxsize`, :func:`yastn.clear_cache`, :func:`yastn.get_cache_info`).
 
     Apply outermost, above ``@lru_cache``::
@@ -53,10 +82,11 @@ def register_cache(func=None, *, key=None):
             ...
 
     ``key`` names the entry in :func:`yastn.get_cache_info`, defaulting to the function name.
+    For class methods, place ``@classmethod`` above ``@register_cache``.
     """
     def _register(f):
-        _REGISTRY.append((f.__module__, f.__name__, key if key is not None else f.__name__))
-        if _MAXSIZE is not None:
+        _REGISTRY.append((f.__module__, f.__qualname__, key if key is not None else f.__name__))
+        if _MAXSIZE is not _UNSET:
             # Registration runs before the ``def`` binds the name, so we cannot rebind the
             # module attribute here -- return the correctly sized wrapper and let the
             # ``def`` bind that instead.
@@ -66,11 +96,31 @@ def register_cache(func=None, *, key=None):
 
 
 def _loaded():
-    """Yield ``(module, attr, info_key)`` for registered caches whose module is still loaded."""
-    for mod_name, attr, info_key in _REGISTRY:
-        mod = sys.modules.get(mod_name)  # absent if the module body raised after registering
-        if mod is not None:
-            yield mod, attr, info_key
+    """Yield ``(owner, attr, info_key)`` for loaded module functions or class methods."""
+    for mod_name, qualified_name, info_key in _REGISTRY:
+        owner = sys.modules.get(mod_name)
+        *parents, attr = qualified_name.split('.')
+        for parent in parents:
+            owner = getattr(owner, parent, None)
+        # A module or class body may still be importing, or may have failed.
+        if owner is not None and hasattr(owner, attr):
+            yield owner, attr, info_key
+
+
+def resize_cache(owner, attr, maxsize):
+    """Replace an LRU wrapper without losing a classmethod descriptor."""
+    descriptor = vars(owner)[attr]
+    function = descriptor.__func__ if isinstance(descriptor, classmethod) else descriptor
+    wrapper = lru_cache(maxsize)(function.__wrapped__)
+    function.cache_clear()
+    setattr(owner, attr, classmethod(wrapper) if isinstance(descriptor, classmethod) else wrapper)
+    # Internal `from ... import ...` aliases must use the new wrapper too;
+    # otherwise they refill an orphan cache that clear/info no longer see.
+    for name, module in tuple(sys.modules.items()):
+        if name.startswith('yastn.') and module is not None:
+            for alias, value in tuple(vars(module).items()):
+                if value is function:
+                    setattr(module, alias, wrapper)
 
 
 def set_registered_maxsize(maxsize):
@@ -78,7 +128,7 @@ def set_registered_maxsize(maxsize):
     global _MAXSIZE
     _MAXSIZE = maxsize
     for mod, attr, _ in _loaded():
-        setattr(mod, attr, lru_cache(maxsize)(getattr(mod, attr).__wrapped__))
+        resize_cache(mod, attr, maxsize)
 
 
 def clear_registered():

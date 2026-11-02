@@ -37,6 +37,12 @@ Reading the statistics
 :func:`yastn.get_cache_info` returns a ``dict`` mapping a short name to that cache's
 :class:`functools.CacheInfo` — a named tuple ``(hits, misses, maxsize, currsize)``:
 
+Statistics cover the current process. ``currsize`` and ``maxsize`` count entries,
+not bytes. Optional-module entries appear only after those modules are imported;
+reading statistics does not import Torch, start workers, or query allocator memory.
+The process-pool dictionary caches described below report ``None`` for hits and
+misses because they do not track those counters.
+
 .. code-block:: python
 
     import yastn
@@ -68,7 +74,17 @@ The entries, grouped by the area they serve:
    * - Non-Abelian fusion trees
      - ``fusion_tree_adjacent_swap``, ``fusion_tree_f_move``,
        ``nonabelian_contraction_coefficient``, ``nonabelian_fusion_coefficient``,
-       ``nonabelian_network_contraction``
+       ``nonabelian_network_contraction``, ``split_channel``, ``oriented_block_charges``,
+       ``fusion_intertwiner``, ``nonabelian_intertwiner``, ``contraction_recoupling``
+   * - Symmetry
+     - ``su2_clebsch_gordan``, ``su2_wigner_6j``, ``su2xu1_fusion_paths``,
+       ``signed_fusion_paths``
+   * - Contraction planning
+     - ``match_legs_tensordot``, ``oe_contraction_path``, ``oe_log_input_mem_size``,
+       ``oe_cache_release_level``
+   * - Process-pool metadata dictionaries
+     - ``ctm_ad_metadata``, ``oe_mp_structure_0``, ``oe_mp_structure_1``, ...
+       (one assembly cache per existing pool, in registry order)
    * - Contraction
      - ``tensordot_f2m``, ``tensordot_fc``, ``tensordot_nf``, ``tensordot_cutensor_cpu``,
        ``tensordot_cutensor_gpu``, ``tensordot_nonabelian_cutensor``,
@@ -117,6 +133,21 @@ the hybrid path (see :ref:`tensor/algebra:gpu execution: hybrid scatter/loop`).
 :func:`yastn.clear_cache` releases cached metadata that is no longer referenced by
 an active autograd graph. This can help between phases with different tensor
 structures or when several worker processes each keep their own caches.
+
+Clearing includes symmetry coefficients and fusion paths, contraction plans,
+and the metadata dictionaries of process pools already loaded in this process.
+It preserves cache capacities and live graphs. Dictionary caches retain their
+own capacity policy and are not resized by :func:`yastn.set_cache_maxsize`;
+the remaining entries above support both global and per-name resizing.
+The backend-module lookup cache is not a computation cache and is excluded.
+
+These APIs operate only in the calling process. Calling ``clear_cache()`` in
+the parent does not clear worker caches, run ``gc.collect()``, or flush CPU/CUDA
+allocators. It therefore does not guarantee an immediate decrease in RSS or
+reserved GPU memory. The existing multi-device ``FixedPoint.forward`` and
+``FixedPoint.backward`` release points request CUDA ``empty_cache()`` from CTM
+workers; they do not invoke ``yastn.clear_cache()``. Single-device execution
+leaves allocator cleanup to the caller.
 
 Non-Abelian fusion-tree plans cache channel matching and recoupling coefficients,
 never tensor values. The scalar contraction and fusion coefficient caches each

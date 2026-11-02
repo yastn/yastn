@@ -15,6 +15,7 @@
 import logging
 import os
 from functools import lru_cache
+from .._cache_registry import register_cache
 from contextlib import nullcontext
 from itertools import product, accumulate
 import time
@@ -39,6 +40,7 @@ from ._merging import _meta_mask
 log = logging.getLogger(__name__)
 
 
+@register_cache(key='oe_cache_release_level')
 @lru_cache(maxsize=8)
 def _cache_release_level(raw):
     r"""Parse ``YASTN_OE_CUDA_CACHE_RELEASE_LEVEL`` robustly. If invalid, warn and pass 0."""
@@ -1001,6 +1003,7 @@ def _preprocess_interleaved_to_expr_and_shapes(*args, dim_overrides=None):
 
     return expr, shapes
 
+@register_cache(key='oe_log_input_mem_size')
 @lru_cache(maxsize=128)
 def _log_input_mem_size(shapes : tuple[tuple[int]],names=None,who=None,**kwargs):
     # log the total size (memory footprint) of tensors entering contraction
@@ -1101,6 +1104,7 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     return res
 
 
+@register_cache(key='oe_contraction_path')
 @lru_cache(maxsize=128)
 def _get_contraction_path_cached(
     expr, shapes, names=None, who=None, optimizer=None, optimizer_kwargs=(), **kwargs

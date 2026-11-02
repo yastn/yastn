@@ -27,6 +27,7 @@ import torch
 import torch.multiprocessing as _mp
 
 from ._auxiliary import get_trimmed_struct
+from .._cache_registry import CacheInfo, register_cache_group
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,20 @@ _pool_registry = {}
 # Bound the per-pool assembly-recipe cache so long, shape-evolving runs don't
 # accumulate one entry per distinct structure without limit (LRU eviction).
 _STRUCT_CACHE_MAXSIZE = 512
+
+
+def _clear_structure_caches():
+    for pool in _pool_registry.values():
+        pool._struct_cache.clear()
+
+
+def _structure_cache_info():
+    return {f'oe_mp_structure_{index}':
+            CacheInfo(None, None, _STRUCT_CACHE_MAXSIZE, len(pool._struct_cache))
+            for index, pool in enumerate(_pool_registry.values())}
+
+
+register_cache_group(_clear_structure_caches, _structure_cache_info)
 
 # How often a result-drain waits before checking whether an assigned worker has
 # died without posting (turns an infinite res_q.get() hang into an error).

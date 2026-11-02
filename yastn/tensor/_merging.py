@@ -499,6 +499,7 @@ def _meta_fusion_tree_transpose(sym, struct, order):
     return ((steps[-1][0], combined_order, combined, steps[-1][3]),)
 
 
+@register_cache(key='split_channel')
 @lru_cache(maxsize=1 << 18)
 def _split_channel(channel, nsym):
     return tuple(tuple(channel[n:n + nsym])
@@ -534,6 +535,7 @@ def _adjacent_swap_coefficient_cached(sym, x, left, right, z, y, yp):
                for middle in sym.fusion_outcomes(left, right))
 
 
+@register_cache(key='oriented_block_charges')
 @lru_cache(maxsize=1 << 16)
 def _oriented_block_charges(sym, flat_charges, signs):
     """Oriented per-leg charges of one reduced block, indexed by flattened charges.

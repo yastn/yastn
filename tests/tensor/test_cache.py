@@ -209,6 +209,157 @@ def test_import_and_cache_api_without_torch():
     assert out.returncode == 0, out.stderr
 
 
+@pytest.mark.parametrize('name,method,args', [
+    ('su2_clebsch_gordan', 'clebsch_gordan', (1, 1, 1, -1, 0, 0)),
+    ('su2_wigner_6j', 'wigner_6j', (1, 1, 0, 1, 1, 0)),
+    ('su2xu1_fusion_paths', 'fusion_paths', (((1, 1), (1, -1)), (0, 0))),
+    ('signed_fusion_paths', 'signed_fusion_paths', (((1, 1), (1, -1)), (0, 0))),
+])
+def test_symmetry_cache_control(name, method, args):
+    """Report populated classmethod caches, clear them, and preserve binding on resize."""
+    from yastn.sym import sym_SU2, sym_SU2xU1
+    sym = sym_SU2 if name.startswith('su2_') else sym_SU2xU1
+    original_size = yastn.get_cache_info()[name].maxsize
+    try:
+        yastn.set_cache_maxsize({name: 2})
+        expected = getattr(sym, method)(*args)
+        assert getattr(sym, method)(*args) == expected
+        before = yastn.get_cache_info()[name]
+        assert before.currsize > 0 and before.hits > 0
+        yastn.clear_cache()
+        assert yastn.get_cache_info()[name] == (0, 0, 2, 0)
+        assert getattr(sym, method)(*args) == expected
+        yastn.set_cache_maxsize(0, only=[name])
+        assert getattr(sym, method)(*args) == expected
+        assert yastn.get_cache_info()[name].currsize == 0
+        # Inherited class methods must still bind to the calling subclass.
+        if name == 'signed_fusion_paths':
+            assert sym_SU2.signed_fusion_paths(((1,), (1,)), (0,)) == ((),)
+    finally:
+        yastn.set_cache_maxsize({name: original_size})
+
+
+def test_structural_and_path_cache_cleanup():
+    from yastn.sym import sym_SU2
+    from yastn.tensor import _merging, _nonabelian, oe_blocksparse
+
+    config = yastn.make_config(sym='U1')
+    a = yastn.rand(config, s=(1, -1), t=((0, 1), (0, 1)), D=((2, 3), (2, 3)))
+    names = ('split_channel', 'oriented_block_charges', 'match_legs_tensordot',
+             'mask', 'oe_contraction_path', 'oe_log_input_mem_size',
+             'oe_cache_release_level', 'nonabelian_intertwiner', 'fusion_intertwiner')
+    sizes = {name: yastn.get_cache_info()[name].maxsize for name in names}
+    try:
+        yastn.set_cache_maxsize(dict.fromkeys(names, 8))
+        _merging._split_channel((0, 1), 1)
+        _merging._oriented_block_charges(sym_SU2, (1, 1), (1, -1))
+        _nonabelian.intertwiner(sym_SU2, ((1,), (1,)), (1, -1), (0,), ())
+        expected = yastn.tensordot(a, a, axes=(1, 0)).to_numpy()
+        # Exercise the real imported mask consumer after the wrapper was resized.
+        masked = oe_blocksparse._apply_meta_mask(a, ((0,),), (2,), 0)
+        assert masked.get_legs(0).t == ((0,),)
+        path_args = ('ab,bc->ac', ((2, 3), (3, 4), (2, 4)))
+        path, _ = oe_blocksparse._get_contraction_path_cached(*path_args)
+        oe_blocksparse._log_input_mem_size(path_args[1], verbosity=0)
+        oe_blocksparse._cache_release_level('1')
+        before = yastn.get_cache_info()
+        assert all(before[name].currsize > 0 for name in names)
+        yastn.clear_cache()
+        after = yastn.get_cache_info()
+        assert all(after[name] == (0, 0, 8, 0) for name in names)
+        np.testing.assert_allclose(yastn.tensordot(a, a, axes=(1, 0)).to_numpy(), expected)
+        assert oe_blocksparse._get_contraction_path_cached(*path_args)[0] == path
+    finally:
+        yastn.set_cache_maxsize(sizes)
+
+
+def test_process_metadata_cache_cleanup(monkeypatch):
+    pytest.importorskip('torch')
+    from collections import OrderedDict
+    from yastn.tensor import _oe_blocksparse_mp as mp
+    from yastn.tn.fpeps.envs import _env_ctm_dist_mp_AD as ad
+
+    # Use the real cache API without spawning workers or initializing CUDA.
+    pool = object.__new__(mp._PersistentWorkerPool)
+    pool._struct_cache = OrderedDict()
+    monkeypatch.setattr(mp, '_pool_registry', {'test': pool})
+    monkeypatch.setattr(ad, '_META_CACHE', {})
+    a = yastn.rand(yastn.make_config(sym='U1'), s=(1, -1),
+                   t=((0,), (0,)), D=((2,), (2,)))
+    data, metadata = ad._split_tensor(a)
+    pool.cache_put('structure', metadata)
+    before = yastn.get_cache_info()
+    assert before['ctm_ad_metadata'].currsize == 1
+    assert before['oe_mp_structure_0'].currsize == 1
+    with pytest.raises(yastn.YastnError, match='managed by process pools'):
+        yastn.set_cache_maxsize({'ctm_ad_metadata': 0})
+    yastn.clear_cache()
+    after = yastn.get_cache_info()
+    for name in ('ctm_ad_metadata', 'oe_mp_structure_0'):
+        assert after[name].currsize == 0
+        assert after[name].maxsize == before[name].maxsize
+    assert ad._split_tensor(a)[0] is data
+    assert pool.cache_get('structure') is None
+    pool.cache_put('structure', metadata)
+    assert pool.cache_get('structure') is metadata
+
+
+def test_resized_cache_import_aliases():
+    from yastn.tensor import _auxiliary, _contractions, _contractions_cutensor
+    names = ('get_blocks', 'match_legs_tensordot')
+    sizes = {name: yastn.get_cache_info()[name].maxsize for name in names}
+    try:
+        yastn.set_cache_maxsize(dict.fromkeys(names, 2))
+        a = yastn.rand(yastn.make_config(sym='U1'), s=(1, -1),
+                       t=((0,), (0,)), D=((2,), (2,)))
+        yastn.clear_cache()
+        block = _contractions.get_blocks(a.config.sym, a.struct)
+        assert _contractions_cutensor.get_blocks(a.config.sym, a.struct) is block
+        assert yastn.get_cache_info()['get_blocks'] == (1, 1, 2, 1)
+        assert _contractions.get_blocks is _auxiliary.get_blocks
+        assert (_contractions_cutensor._match_legs_tensordot
+                is _contractions._match_legs_tensordot)
+        yastn.clear_cache()
+        assert _contractions.get_blocks.cache_info().currsize == 0
+    finally:
+        yastn.set_cache_maxsize(sizes)
+
+
+@pytest.mark.parametrize('maxsize', [0, 2, None])
+def test_late_cache_registration(maxsize):
+    """A module imported after global sizing inherits even an unbounded capacity."""
+    program = '''
+import sys, types
+import yastn
+yastn.set_cache_maxsize(MAXSIZE)
+module = types.ModuleType('yastn._test_late_cache')
+sys.modules[module.__name__] = module
+exec("""
+from functools import lru_cache
+from yastn._cache_registry import register_cache
+class Symmetry:
+    @classmethod
+    @register_cache(key='test_late_cache')
+    @lru_cache(maxsize=7)
+    def value(cls, x):
+        return x + 1
+""", module.__dict__)
+assert module.Symmetry.value(3) == 4
+info = yastn.get_cache_info()['test_late_cache']
+assert info.maxsize == MAXSIZE, info
+assert info.misses == 1, info
+assert info.currsize == (0 if MAXSIZE == 0 else 1), info
+yastn.clear_cache()
+assert yastn.get_cache_info()['test_late_cache'].currsize == 0
+yastn.set_cache_maxsize({'test_late_cache': 3})
+assert module.Symmetry.value(3) == 4
+assert yastn.get_cache_info()['test_late_cache'].maxsize == 3
+'''.replace('MAXSIZE', repr(maxsize))
+    out = subprocess.run([sys.executable, '-c', program], capture_output=True, text=True,
+                         cwd=pathlib.Path(yastn.__file__).parents[1])
+    assert out.returncode == 0, out.stderr
+
+
 def test_hash_blocks(config_kwargs):
     config = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config, s=(1, -1),

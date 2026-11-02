@@ -243,17 +243,24 @@ def test_forward_live_packing_bound(oracle_backend, monkeypatch):
     torch.testing.assert_close(actual, expected.data)
 
 
-def test_adaptive_packing_budget(oracle_backend, monkeypatch):
+@pytest.mark.parametrize('divisor,expected_mib', [(None, 8), (4, 8), (8, 4)])
+def test_adaptive_packing_budget(oracle_backend, monkeypatch, divisor, expected_mib):
     data = SimpleNamespace(is_cuda=True, device='cuda:0')
     plan = SimpleNamespace(slices_a=((0, 1 << 24),), slices_b=((0, 1 << 24),),
                            slices_c=((0, 1 << 20),), size=1 << 20)
     monkeypatch.setenv('YASTN_CUTENSOR_PACK_CHUNK_BYTES', str(1 << 30))
+    monkeypatch.delenv('YASTN_MEMORY_OVERRIDE', raising=False)
+    if divisor is None:
+        monkeypatch.delenv('YASTN_CUTENSOR_PACK_DIVISOR', raising=False)
+    else:
+        monkeypatch.setenv('YASTN_CUTENSOR_PACK_DIVISOR', str(divisor))
     monkeypatch.setattr(torch.cuda, 'mem_get_info', lambda device: (64 << 20, 1 << 30))
     monkeypatch.setattr(torch.cuda, 'memory_reserved', lambda device: 8 << 20)
     monkeypatch.setattr(torch.cuda, 'memory_allocated', lambda device: 4 << 20)
     budget = oracle_backend._nonabelian_pack_budget(data, plan, torch.float64)
     available = (64 + 8 - 4 - 8) << 20
-    assert 0 < budget * 8 <= available // 8
+    assert 0 < budget * 8 <= available // (4 if divisor is None else divisor)
+    assert budget * 8 == expected_mib << 20
     assert budget & (budget - 1) == 0
 
 

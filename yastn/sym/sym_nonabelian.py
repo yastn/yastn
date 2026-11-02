@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from functools import lru_cache
+from .._cache_registry import register_cache
 import numpy as np
 
 from .sym_abelian import sym_meta
@@ -153,6 +154,7 @@ class sym_nonabelian(metaclass=_nonabelian_meta):
         return cls._signed_fusion_paths_cached(oriented, target)
 
     @classmethod
+    @register_cache(key='signed_fusion_paths')
     @lru_cache(maxsize=1 << 15)
     def _signed_fusion_paths_cached(cls, oriented, target):
         return cls.fusion_paths(oriented, target)

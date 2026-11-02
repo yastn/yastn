@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from numbers import Integral
 from functools import lru_cache
+from .._cache_registry import register_cache
 import numpy as np
 
 from .sym_nonabelian import sym_nonabelian
@@ -69,6 +70,7 @@ class sym_SU2xU1(sym_nonabelian):
         return cls._fusion_paths_cached(charges, target)
 
     @classmethod
+    @register_cache(key='su2xu1_fusion_paths')
     @lru_cache(maxsize=1 << 15)
     def _fusion_paths_cached(cls, charges, target):
         if sum(q for _, q in charges) != target[1]:

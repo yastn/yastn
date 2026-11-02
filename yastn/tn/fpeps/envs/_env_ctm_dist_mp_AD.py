@@ -51,6 +51,7 @@ import threading
 import time
 
 from ._ctm_opts import CTMOpts, make_ctm_opts
+from ...._cache_registry import CacheInfo, register_cache_group
 
 
 log = logging.getLogger(__name__)
@@ -305,6 +306,17 @@ class _SavedGraphHandle:
 
 _META_CACHE = {}              # key -> level=1 meta dict (no 'data')
 _CACHE_LIMIT = 8192
+
+
+def _clear_metadata_cache():
+    _META_CACHE.clear()
+
+
+def _metadata_cache_info():
+    return {'ctm_ad_metadata': CacheInfo(None, None, _CACHE_LIMIT, len(_META_CACHE))}
+
+
+register_cache_group(_clear_metadata_cache, _metadata_cache_info)
 
 
 def _shape_key(t):
