@@ -1234,6 +1234,32 @@ def spec_diff(x, y):
         return float('Inf')
 
 
+def corner_spectra_summary(corner_sv, n=5) -> str:
+    """
+    Summarize corner spectra, as returned by :meth:`EnvCTM.calculate_corner_svd`, for logging.
+
+    For every corner, the ``n`` largest and ``n`` smallest singular values, merged over
+    charge sectors and sorted, each followed by the charge of its sector, and the number of
+    kept values. Entries of ``corner_sv`` which are not corners, i.e., ``'max_dsv'``
+    in the history of :meth:`EnvCTM.ctm_conv_corner_spec`, and missing corners are skipped.
+    """
+    lines = []
+    for k, S in corner_sv.items():
+        if not isinstance(k, tuple) or S is None:
+            continue
+        nsym = S.config.sym.NSYM
+        vals = []
+        for t in S.get_blocks_charge():
+            q = f"({','.join(str(x) for x in t[:nsym])})" if nsym else ""
+            vals.extend((v, q) for v in S.config.backend.to_numpy(S[t]).tolist())
+        vals.sort(key=lambda x: -abs(x[0]))
+        fmt = lambda vs: " ".join(f"{v:.2g}{q}" for v, q in vs)
+        lines.append((k, f"top{n} [{fmt(vals[:n])}] bottom{n} [{fmt(vals[-n:])}] ({len(vals)} kept)"))
+    if len(lines) == 1:
+        return f"C spectrum s/s0 {lines[0][1]}"
+    return "C spectra s/s0" + "".join(f"\n  {tuple(site)} {dirn}: {s}" for (site, dirn), s in lines)
+
+
 def norm_diff(old: Lattice[dict[Site,EnvCTM_local]], new: Lattice[dict[Site,EnvCTM_local]],
               dirns, p='inf')-> Lattice[dict[Site,EnvCTM_local]]:
     """ Compute norms of changes of element moduli between two environments.

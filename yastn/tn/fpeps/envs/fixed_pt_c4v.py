@@ -23,6 +23,7 @@ import torch
 from dataclasses import replace
 
 from ._ctm_opts import CTMOpts, FixedPointOpts
+from ._env_ctm import corner_spectra_summary
 from ._env_ctm_c4v import EnvCTM_c4v
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, _concat_data, _assemble_dict_from_1d, extract_phase
 from .rdm import *
@@ -150,7 +151,7 @@ def fp_ctmrg_c4v(env: EnvCTM_c4v,
 
 
 class FixedPoint_c4v(torch.autograd.Function):
-    ctm_log, t_ctm, t_check = None, None, None
+    ctm_log, t_ctm, t_check, ctm_info = None, None, None, None
 
     @staticmethod
     def compute_rdms(env):
@@ -231,9 +232,22 @@ class FixedPoint_c4v(torch.autograd.Function):
                 log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
 
             if converged:
-                log.info(f"CTM converged: sweeps {sweep+1} t_ctm {t_ctm} [s] t_check {t_check} [s]"
-                         + f" history {[r['max_dsv'] for r in conv_history]}.")
                 break
+
+        # One report for either outcome, with the spectrum of the final corner. The history
+        # holds the spectra unless a callable conv_check replaced the corner-spectrum test.
+        last = conv_history[-1] if conv_history and isinstance(conv_history[-1], dict) else None
+        corner_sv = last if last is not None else env.detach().calculate_corner_svd()
+        max_dsv = last['max_dsv'] if last is not None else max_dsv
+        info = dict(sweeps=sweep+1 if opts.max_sweeps > 0 else 0, max_sweeps=opts.max_sweeps,
+                    t_ctm=t_ctm, t_check=t_check, max_dsv=float('nan') if max_dsv is None else max_dsv,
+                    corner_tol=opts.corner_tol, corner_spectra=corner_spectra_summary(corner_sv))
+        FixedPoint_c4v.ctm_info = info
+        log.info(f"CTM {'converged' if converged else 'not converged'}: sweeps {info['sweeps']}/{opts.max_sweeps},"
+                 + f" t_ctm {t_ctm:.1f} [s], t_check {t_check:.1f} [s],"
+                 + f" max_dsv {info['max_dsv']:.1e} {'<' if converged else '>'} tol {opts.corner_tol}"
+                 + f" | {info['corner_spectra']}"
+                 + f" | history {[r['max_dsv'] for r in conv_history if isinstance(r, dict)]}.")
 
         return env, converged, conv_history, t_ctm, t_check
 
@@ -260,7 +274,14 @@ class FixedPoint_c4v(torch.autograd.Function):
             env, opts.fwd,
         )
         if not converged:
-            raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
+            # get_converged_env has logged the progress and the corner spectrum; the message
+            # carries the progress to the caller's handlers, ctm_info all of it
+            info = FixedPoint_c4v.ctm_info
+            err = NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!"
+                                    + f" sweeps {info['sweeps']}/{info['max_sweeps']}, t_ctm {info['t_ctm']:.1f} [s],"
+                                    + f" max_dsv {info['max_dsv']:.1e} > tol {info['corner_tol']}")
+            err.ctm_info = info
+            raise err
 
         # NOTE we need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the desired svd policy chosen for CTMRG fixed-point (differentiated) step
@@ -299,6 +320,7 @@ class FixedPoint_c4v(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, none0, none1, none2, *grad_env):
+        t0_backward = time.perf_counter()
         verbosity = ctx.verbosity
         grads = grad_env
 
@@ -355,6 +377,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         S = None
         prev_grad_tmp = None
         stall = 0
+        step, grad_diff, reason = -1, float('nan'), "budget exhausted"
         for step in range(neumann_max_iter):
             nxt, dA_term = dfdCA_vjp(grads)
             S = dA_term if S is None else tuple(a + b for a, b in zip(S, dA_term))
@@ -366,18 +389,25 @@ class FixedPoint_c4v(torch.autograd.Function):
             if prev_grad_tmp is not None:
                 grad_diff = torch.norm(grad_tmp - prev_grad_tmp).item()
                 if grad_diff < neumann_tol:
-                    best_S = S
-                    log.info(f"Fixed_pt_c4v: The norm of the full grad diff is below {neumann_tol}.")
+                    best_grad_diff, best_S = grad_diff, S
+                    reason = "converged (|dS| < tol)"
                     break
                 if grad_diff < best_grad_diff:
                     best_grad_diff, best_S, stall = grad_diff, S, 0
                 else:
                     stall += 1
                     if stall >= patience:
-                        log.info(f"Fixed_pt_c4v: Full grad diff stopped decreasing for {patience} steps "
-                                 f"(best {best_grad_diff:.3e} at the kept estimate); stopping Neumann.")
+                        reason = f"stalled ({patience} steps without improvement)"
                         break
             prev_grad_tmp = grad_tmp
+
+        # One summary for every exit. |dS| is the increment of the env-mediated part of the
+        # gradient; |S| the norms of the returned estimate, i.e. the one with the best |dS|.
+        S_best = torch.cat(best_S)
+        log.info(f"Fixed_pt_c4v backward: {reason}, steps {step+1}/{neumann_max_iter},"
+                 + f" last |dS| {grad_diff:.1e}, best |dS| {best_grad_diff:.1e}, tol {neumann_tol},"
+                 + f" |S|_2 {S_best.norm().item():.2e}, |S|_inf {S_best.abs().max().item():.2e},"
+                 + f" t {time.perf_counter()-t0_backward:.1f} [s]")
 
         dA = best_S
         # one grad per forward input: (env, opts, *state_params)

@@ -26,6 +26,7 @@ import torch
 from dataclasses import replace
 
 from ._ctm_opts import CTMOpts, FixedPointOpts
+from ._env_ctm import corner_spectra_summary
 from ._env_dataclasses import Gauge
 from .rdm import *
 from .._geometry import Lattice
@@ -688,7 +689,7 @@ def fp_ctmrg(env: EnvCTM,
 
 
 class FixedPoint(torch.autograd.Function):
-    ctm_log, t_ctm, t_check = None, None, None
+    ctm_log, t_ctm, t_check, ctm_info = None, None, None, None
 
     @staticmethod
     def compute_rdms(env):
@@ -862,6 +863,7 @@ class FixedPoint(torch.autograd.Function):
 
         sweep = 0
         prev_sectors = None
+        stuck = False
         for sweep in range(opts.max_sweeps):
             t0 = time.perf_counter()
             itr_out= next(ctm_itr)
@@ -903,11 +905,22 @@ class FixedPoint(torch.autograd.Function):
                                 f"{ref:.3e} {stuck_window * stuck_block} sweeps earlier "
                                 f"(< {stuck_factor}x improvement) at sweep {len(conv_history)}; "
                                 f"declaring no fixed point.")
-                        converged = False
+                        converged, stuck = False, True
                         break
 
-        log.info(f"CTM: convergence: {converged}, sweeps {sweep+1}, t_ctm {t_ctm} [s], t_check {t_check} [s]\n"
-                +f"max_de {itr_out.max_de} max_si_error {env.max_si_error()} history {[r['max_dsv'] for r in conv_history]}.")
+        # The history holds the corner spectra unless a callable conv_check replaced the
+        # corner-spectrum test.
+        last = conv_history[-1] if conv_history and isinstance(conv_history[-1], dict) else None
+        corner_sv = last if last is not None else env.calculate_corner_svd()
+        max_dsv = last['max_dsv'] if last is not None else max_dsv
+        info = dict(sweeps=sweep+1 if opts.max_sweeps > 0 else 0, max_sweeps=opts.max_sweeps,
+                    t_ctm=t_ctm, t_check=t_check, max_dsv=float('nan') if max_dsv is None else max_dsv,
+                    corner_tol=opts.corner_tol, stuck=stuck, corner_spectra=corner_spectra_summary(corner_sv))
+        FixedPoint.ctm_info = info
+        log.info(f"CTM: convergence: {converged}, sweeps {info['sweeps']}/{opts.max_sweeps}, t_ctm {t_ctm} [s], t_check {t_check} [s],"
+                +f" max_dsv {info['max_dsv']:.1e} {'<' if converged else '>'} tol {opts.corner_tol}\n"
+                +f"max_de {itr_out.max_de} max_si_error {env.max_si_error()} history {[r['max_dsv'] for r in conv_history if isinstance(r, dict)]}.\n"
+                +info['corner_spectra'])
 
         return env, converged, conv_history, t_ctm, t_check
 
@@ -967,7 +980,15 @@ class FixedPoint(torch.autograd.Function):
             env, opts.fwd, devices=devices, **opts.stuck_kwargs,
         )
         if not converged:
-            raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
+            # get_converged_env has logged the progress and the corner spectra; the message
+            # carries the progress to the caller's handlers, ctm_info all of it
+            info = FixedPoint.ctm_info
+            err = NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!"
+                                    + (" Stopped by the stuck-block check." if info['stuck'] else "")
+                                    + f" sweeps {info['sweeps']}/{info['max_sweeps']}, t_ctm {info['t_ctm']:.1f} [s],"
+                                    + f" max_dsv {info['max_dsv']:.1e} > tol {info['corner_tol']}")
+            err.ctm_info = info
+            raise err
 
         # 2. Perform 1 extra CTM step to find the gauge transformation under which we have element-wise convergence
         #
@@ -1041,6 +1062,7 @@ class FixedPoint(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, none0, none1, none2, *grad_env):
+        t0_backward = time.perf_counter()
         verbosity= ctx.verbosity
         grads = grad_env
 
@@ -1159,6 +1181,7 @@ class FixedPoint(torch.autograd.Function):
         best_S = None
         S = None
         stall = 0
+        step, grad_diff, reason = -1, float('nan'), "budget exhausted"
         time0 = time.perf_counter()
         for step in range(neumann_max_iter):
             nxt, dA_term = dfdCA_vjp(grads)
@@ -1170,10 +1193,11 @@ class FixedPoint(torch.autograd.Function):
             grad_tmp = torch.cat(S)
             if prev_grad_tmp is not None:
                 grad_diff = torch.norm(grad_tmp - prev_grad_tmp).item()
-                print("full grad diff", grad_diff)
+                if verbosity > 2:
+                    log.log(logging.INFO, f"Fixed_pt backward: step {step+1} full grad diff {grad_diff}")
                 if grad_diff < neumann_tol:
-                    best_S = S
-                    log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {neumann_tol}.")
+                    best_grad_diff, best_S = grad_diff, S
+                    reason = "converged (|dS| < tol)"
                     break
 
                 if grad_diff < best_grad_diff:
@@ -1181,15 +1205,19 @@ class FixedPoint(torch.autograd.Function):
                 else:
                     stall += 1
                     if stall >= patience:
-                        log.log(logging.INFO, f"Fixed_pt: Full grad diff stopped decreasing for {patience} steps "
-                                              f"(best {best_grad_diff:.3e} at the kept estimate); stopping Neumann.")
+                        reason = f"stalled ({patience} steps without improvement)"
                         break
 
             prev_grad_tmp = grad_tmp
 
         dA = best_S
-        time1 = time.perf_counter()
-        log.info(f"{type(ctx).__name__}.backward t_gradsum {time1-time0} [s], steps {step+1}")
+        # One summary for every exit. |dS| is the increment of the env-mediated part of the
+        # gradient; |S| the norms of the returned estimate, i.e. the one with the best |dS|.
+        S_best = torch.cat(best_S)
+        log.info(f"Fixed_pt backward: {reason}, steps {step+1}/{neumann_max_iter},"
+                 + f" last |dS| {grad_diff:.1e}, best |dS| {best_grad_diff:.1e}, tol {neumann_tol},"
+                 + f" |S|_2 {S_best.norm().item():.2e}, |S|_inf {S_best.abs().max().item():.2e},"
+                 + f" t_gradsum {time.perf_counter()-time0:.1f} [s], t {time.perf_counter()-t0_backward:.1f} [s]")
 
         # Distributed path only: the Neumann stage-backwards ran in the CTM
         # worker pool, which is now idle (all stages done, drop_graphs issued)
