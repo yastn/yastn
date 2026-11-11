@@ -62,7 +62,8 @@ def find_gauge_c4v(env_old, env, verbose=False):
         env (EnvCTM_c4v): CTM_c4v environment after a single CTMRG step
 
     Returns:
-        Tensor: gauge transformation matrix sigma.
+        tuple(Tensor, Tensor, Tensor) | None: gauge transformation matrix sigma and the phases
+        T_phase, C_phase of T and C; None if no gauge (zero mode) is found.
     """
     site = env.sites()[0]
     T_olds, T_news = [env_old[site].t, env_old[site].t.flip_signature()], [env[site].t, env[site].t.flip_signature()]
@@ -299,10 +300,11 @@ class FixedPoint_c4v(torch.autograd.Function):
         log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
         t0 = time.perf_counter()
-        sigma, T_phase, C_phase = find_gauge_c4v(env_converged, ctm_env_out, verbose=False)
+        gauge = find_gauge_c4v(env_converged, ctm_env_out, verbose=False)
         t1 = time.perf_counter()
-        if sigma is None:
+        if gauge is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
+        sigma, T_phase, C_phase = gauge
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
         env_dict = env_converged.to_dict(level=0)
         env_data, env_meta = split_data_and_meta(env_dict)
