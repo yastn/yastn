@@ -370,7 +370,7 @@ def svds_scipy(data, meta, sizes, thresh=None, solver='arpack', **kwargs):
         # Is block too small for iterative svd ?
         # TODO user defined threshold
         # the second condition is heuristic estimate when performing dense svd should be faster.
-        if (k < min(D) - 1 and D[0] * D[1] > 5000) or (not(thresh is None) and min(D) * thresh > k):
+        if (k < min(D) - 1 and D[0] * D[1] > 5000) or (thresh is not None and min(D) * thresh > k):
             if solver == 'arpack':
                 try:
                     U, S, V = scipy.sparse.linalg.svds(data[sl].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
@@ -475,7 +475,7 @@ def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
             s = np.sqrt(d)
             _U = U / s
             _V = (V / np.conjugate(s)).conj().T
-        except ValueError as e:
+        except ValueError:
             try:
                 # V.H @ U != I -> solve U.H @ V = I for V
                 _V = scipy.linalg.solve(U.conj().T, np.eye(len(S)), lower=False, overwrite_a=False, overwrite_b=False,
@@ -605,7 +605,7 @@ def qr(data, meta, sizes):
 
 
 def pinv(a, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
-    return np.linalg.pinv(a, rcond=rtol if not rtol is None else rcond, hermitian=hermitian)
+    return np.linalg.pinv(a, rcond=rtol if rtol is not None else rcond, hermitian=hermitian)
 
 def flip(data):
     return np.flip(data.ravel(), axis=0)

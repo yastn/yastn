@@ -13,12 +13,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ==============================================================================
-import copy
 import logging
 import time
 
-import numpy as np
-from scipy.optimize import minimize
 import torch
 from dataclasses import replace
 
@@ -27,8 +24,7 @@ from ._env_ctm_c4v import EnvCTM_c4v
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, _concat_data, _assemble_dict_from_1d, extract_phase
 from .rdm import *
 from .._geometry import Lattice
-from ....initialize import zeros, eye
-from ....tensor import tensordot, diag
+from ....tensor import tensordot
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 log = logging.getLogger("FixedPoint_c4v")

@@ -53,9 +53,8 @@ jobs:
             pip install flake8 pylint;
 
       - name: static analysis flake8
-        run: |
-            flake8 . --count --select=E9,F63,F7,F82 --ignore=F821 --show-source --statistics;
-            flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics;
+        # rules are configured in .flake8
+        run: flake8 . --count --show-source --statistics
 
       - name: static analysis py_lint
         continue-on-error: true
@@ -101,9 +100,8 @@ jobs:
             pip install torch==2.10 --index-url https://download.pytorch.org/whl/cpu
 
       - name: static analysis flake8
-        run: |
-            flake8 . --count --select=E9,F63,F7,F82 --ignore=F821 --show-source --statistics;
-            flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics;
+        # rules are configured in .flake8
+        run: flake8 . --count --show-source --statistics
 
       - name: static analysis py_lint
         continue-on-error: true

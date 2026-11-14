@@ -374,7 +374,7 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
     if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
         projectors = {site: projectors for site in sites}  # spread projectors over sites
     if set(sites) != set(projectors.keys()):
-        raise YastnError(f"Projectors not defined for some sites.")
+        raise YastnError("Projectors not defined for some sites.")
 
     # change each list of projectors into keys and projectors
     projs_sites = {}

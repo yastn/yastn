@@ -223,7 +223,6 @@ def test_fp_ctmrg_multi_device(config_kwargs):
     Neumann backward -- a path that has never had coverage.
     """
     _needs_torch_mp(config_kwargs)
-    import torch
     from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg
 
     # A weakly-entangled state: close to a product state, so CTM converges in a

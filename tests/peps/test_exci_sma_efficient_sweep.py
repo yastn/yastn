@@ -17,7 +17,6 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps import TriangularLattice
 import itertools
 import numpy as np
 
@@ -53,7 +52,6 @@ def test_exci_sma_UUD(config_kwargs):
     """ Compute excited state expectation values of a UUD state on a 3x3 finite patch. """
     print(" Compute excited state expectation values of a UUD state on a 3x3 finite patch. ")
 
-    geometry = TriangularLattice(full_patch=False) # \sqrt{3}\times\sqrt{3}
     psi = init_peps(config_kwargs)
     # excited state basis
     exci_basis = np.array([[0, 1], [0, 1], [1, 0]])
@@ -67,7 +65,7 @@ def test_exci_sma_UUD(config_kwargs):
 
     config = yastn.make_config(sym='none', **config_kwargs)
     s12 = yastn.operators.Spin12(**config._asdict())
-    Id, Sz, Sx, Sy, Sp, Sm = s12.I(), s12.sz(), s12.sx(), s12.sy(), s12.sp(), s12.sm()
+    Sz, Sx, Sy, Sp, Sm = s12.sz(), s12.sx(), s12.sy(), s12.sp(), s12.sm()
 
     Jzz = 2.98
     Jxy = 0.21
@@ -250,15 +248,6 @@ def test_exci_sma_UUD(config_kwargs):
         kxs_[i] = new_k[0]
         kys_[i] = new_k[1]
 
-    k_labels = {
-        "ticks": [0, 9, 13, 20],
-        "labels": [
-            r"$\Gamma(0,0)$",
-            r"$K(\frac{2\pi}{\sqrt{3}},\frac{2\pi}{3})$",
-            r"$M(\frac{\pi}{\sqrt{3}},\pi)$",
-            r"$\Gamma(0,0)$",
-        ],
-    }
 
     # compute each k
     evs = np.zeros((len(kxs), 3)) # only 3 modes

@@ -26,7 +26,7 @@ def are_identical_tensors(a, b):
     for k in da:
         if k != '_data':
             assert da[k] == db[k]
-    assert type(a.data) == type(b.data)
+    assert type(a.data) is type(b.data)
     assert np.allclose(a.to_numpy(), b.to_numpy())
 
 

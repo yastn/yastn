@@ -1123,7 +1123,7 @@ def _meta_swap_gate_charge(sym, struct, charges, axes, fss):
     try:
         charges = np.array(charges, dtype=np.int64).reshape(1, len(axes), sym.NSYM) % 2
     except ValueError:
-        raise YastnError(f'Length or number of charges does not match sym.NSYM or axes.')
+        raise YastnError('Length or number of charges does not match sym.NSYM or axes.')
     tp = np.sum(tp[:, :, fss] * charges[:, :, fss], axis=(1, 2), dtype=np.int64) % 2
     inds = np.where(tp)[0]
     return _compress_slices(bl.slc[inds])

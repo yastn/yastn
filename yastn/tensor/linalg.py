@@ -629,7 +629,6 @@ def truncation_mask(S, which='LR',
                          + "Switch one off by providing the default value.")
 
     backend = S.config.backend
-    nsym = S.config.sym.NSYM
     f_which = {'LR': backend.real, 'LM': backend.absolute}
     ff = f_which.get(which, None)
 
@@ -740,7 +739,6 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     -------
     `Q`, `R`
     """
-    sym = a.config.sym
     _test_axes_all(a, axes)
     out_ml, out_mr = _clear_axes(*axes)
     #

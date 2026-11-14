@@ -14,7 +14,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ==============================================================================
 """ basic procedures of single Mps """
-import os
 import pytest
 import yastn
 import yastn.tn.mps as mps
@@ -115,8 +114,8 @@ def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     tmp3 = psi_pbc.to_dict()
     phi_pbc1 = mps.MpoPBC.from_dict(tmp3)
     phi_pbc2 = yastn.from_dict(tmp3)
-    assert type(phi_pbc1) == mps.MpoPBC
-    assert type(phi_pbc2) == mps.MpoPBC
+    assert type(phi_pbc1) is mps.MpoPBC
+    assert type(phi_pbc2) is mps.MpoPBC
 
 
 if __name__ == '__main__':

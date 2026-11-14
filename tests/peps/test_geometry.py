@@ -106,7 +106,7 @@ def test_SquareLattice_obc():
     #
     # trivial map from site to unique index
     assert net.site2index((1, 0)) == (1, 0)
-    assert net.site2index(None) == None
+    assert net.site2index(None) is None
 
     # whether a nearest-neighbor bond is horizontal or vertical and
     # whether it is ordered as (left, right) or (top, bottom) lattice sites.
@@ -205,7 +205,7 @@ def test_SquareLattice_infinite():
     assert net.nn_site((2, 0), d='b') == (3, 0)
     assert net.nn_site((0, 1), d=(3, 4)) == Site(3, 5)
     assert net.site2index((1, 0)) == (1, 0)
-    assert net.site2index(None) == None
+    assert net.site2index(None) is None
 
     assert all(net.nn_bond_dirn(bond) == 'lr' for bond in net.bonds(dirn='h'))
     assert all(net.nn_bond_dirn(bond) == 'tb' for bond in net.bonds(dirn='v'))
@@ -310,7 +310,7 @@ def test_geometry_equal():
           fpeps.SquareLattice(dims=(2, 2), boundary='infinite'),
           fpeps.SquareLattice(dims=(2, 2), boundary='obc')]
 
-    assert gs[0] != None
+    assert gs[0] is not None
     assert all(g == g for g in gs)
     assert all(g0 != g1 for n, g0 in enumerate(gs) for g1 in gs[n+1:])
 
@@ -321,19 +321,19 @@ def test_Peps_get_set():
     net = fpeps.CheckerboardLattice()
     #
     psi = fpeps.Peps(net)
-    assert all(psi[site] == None for site in psi.sites())  # all tensors initialized as None
+    assert all(psi[site] is None for site in psi.sites())  # all tensors initialized as None
     #
     psi[(0, 0)] = "Wannabe tensor"
     # on a checkerboard lattice we have the same tensor at Site(0, 0) and Site(1, 1)
     assert psi[(0, 0)] == psi[(1, 1)] == psi[(5, 1)] == "Wannabe tensor"
-    assert psi[(0, 1)] == psi[(1, 0)] == psi[(5, 0)] == None
+    assert psi[(0, 1)] is None and psi[(1, 0)] is None and psi[(5, 0)] is None
 
     ##########
 
     net = fpeps.SquareLattice(dims=(3, 3), boundary='obc')
     psi = fpeps.Peps(net)
 
-    assert all(psi[site] == None for site in psi.sites())  # all tensors initialized as None
+    assert all(psi[site] is None for site in psi.sites())  # all tensors initialized as None
     psi[(0, 0)] = "Wannabe tensor"
     assert psi[(0, 0)] == "Wannabe tensor"
     assert psi[(1, 1)] is None
@@ -349,7 +349,7 @@ def test_Peps_get_set():
     net = fpeps.SquareLattice(dims=(3, 3), boundary='infinite')
     psi = fpeps.Peps(net)
 
-    assert all(psi[site] == None for site in psi.sites())  # all tensors initialized as None
+    assert all(psi[site] is None for site in psi.sites())  # all tensors initialized as None
     psi[(0, 0)] = "Wannabe tensor"
     assert psi[(0, 0)] == psi[(3, 3)] == psi[(9, 6)] == "Wannabe tensor"
     assert psi[(0, 1)] is None

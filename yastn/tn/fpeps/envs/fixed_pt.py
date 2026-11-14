@@ -13,14 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ==============================================================================
-import copy
 import logging
 import math
 import time
 import warnings
 
 import numpy as np
-from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator, eigsh, eigs, ArpackNoConvergence
 import torch
 from dataclasses import replace
@@ -29,8 +27,8 @@ from ._ctm_opts import CTMOpts, FixedPointOpts
 from ._env_dataclasses import Gauge
 from .rdm import *
 from .._geometry import Lattice
-from ....initialize import zeros, eye, rand
-from ....tensor import Tensor, tensordot, diag, qr
+from ....initialize import zeros, rand
+from ....tensor import Tensor, tensordot, qr
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 
@@ -1041,7 +1039,6 @@ class FixedPoint(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, none0, none1, none2, *grad_env):
-        verbosity= ctx.verbosity
         grads = grad_env
 
         env_data = ctx.saved_tensors[:ctx.env_data_num]

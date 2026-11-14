@@ -32,10 +32,9 @@ from functools import lru_cache
 import numpy as np
 
 from .._profile import nsys_profile, nvtx_range
-from ._auxiliary import (_encode_rows_shared, _row_keys_pair, get_blocks, hash_blocks,
+from ._auxiliary import (get_blocks, hash_blocks,
                          _struct, HashedMask, get_blocks_charges_all, find_matching_indices)
-from ._contractions import (_convert_bl_for_cutensor, _cutensor_meta, _match_legs_tensordot,
-                            get_blocks_and_subslices, _matched_pair_indices,)
+from ._contractions import (_convert_bl_for_cutensor, _cutensor_meta,)
 from ._tests import YastnError
 from ..backend import import_backend
 

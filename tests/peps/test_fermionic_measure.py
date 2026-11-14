@@ -84,7 +84,7 @@ def measure_combinations(*operators, env=None, fun=None, **kwargs):
     for sites in product(*([env.sites()] * lo)):
         try:
             res[sites] = f(*operators, sites=sites, **kwargs)
-        except:
+        except Exception:
             pass
     return res
 

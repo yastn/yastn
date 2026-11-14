@@ -230,7 +230,7 @@ def clear_projectors(sites, projectors):
     try:
         for k in sites: projectors[k]
     except KeyError:
-        raise YastnError(f"Projectors not defined for some sites.")
+        raise YastnError("Projectors not defined for some sites.")
 
     # change each list of projectors into keys and projectors
     for k, v in projectors.items():
@@ -262,7 +262,7 @@ def clear_operator_input(op, sites):
     try:
         for k in sites: op_dict[k]
     except KeyError:
-        raise YastnError(f"Operators not defined for some sites.")
+        raise YastnError("Operators not defined for some sites.")
 
     for k, v in op_dict.items():
         if isinstance(v, dict):

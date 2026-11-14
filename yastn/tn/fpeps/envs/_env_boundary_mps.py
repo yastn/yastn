@@ -15,12 +15,11 @@
 # ==============================================================================
 from itertools import accumulate
 
-from tqdm import tqdm
 
 from ._env_contractions import identity_boundary
 from ._env_window import _measure_nsite, _measure_2site, _sample
 from .._gates_auxiliary import clear_operator_input
-from .._peps import PEPS_CLASSES, Peps2Layers
+from .._peps import PEPS_CLASSES
 from ... import mps
 from ....tensor import YastnError
 
@@ -78,7 +77,7 @@ class EnvBoundaryMPS():
 
         self.info = {}
 
-        if opts_var == None:
+        if opts_var is None:
             opts_var = {'max_sweeps': 2, 'normalize': False,}
 
         if 'r' in setup:

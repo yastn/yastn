@@ -369,7 +369,7 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
         if cmd == 'shutdown':
             if os.getenv('YASTN_PROFILE', '0') == '1':
                 msg= f"oe_mp rank {rank} dev {gpu_dev} cache info:\n"
-                msg+=f"\n".join([ " ".join(map(str,rec)) for rec in get_cache_info().items() ])
+                msg+="\n".join([ " ".join(map(str,rec)) for rec in get_cache_info().items() ])
                 print(msg)
             break
         try:

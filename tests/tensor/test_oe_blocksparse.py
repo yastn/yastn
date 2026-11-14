@@ -14,7 +14,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ==============================================================================
 """Tests for yastn.get_contraction_path and yastn.contract_with_unroll."""
-import numpy as np
 import pytest
 import yastn
 import yastn.tensor.oe_blocksparse as oe_blocksparse

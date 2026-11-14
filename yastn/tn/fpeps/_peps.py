@@ -282,7 +282,7 @@ class Peps2Layers():
             return type(self)(self.ket.clone())
         if self.ket == self._bra: # TODO is this desired behavior?
             return type(self)(self.ket.clone())
-        return type(self)(self.ket.clone(), ket=self._bra.clone())
+        return type(self)(self.ket.clone(), bra=self._bra.clone())
 
     @property
     def bra(self):

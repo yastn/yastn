@@ -48,7 +48,7 @@ class dataclasses_common():
             if getattr(self, k.name) is not None:
                 try:
                     getattr(self, k.name).detach_()
-                except RuntimeError as e:
+                except RuntimeError:
                     # NOTE
                     # RuntimeError: Can't detach views in-place. Use detach() instead. If you are using DistributedDataParallel (DDP)
                     # for training, and gradient_as_bucket_view is set as True, gradients are views of DDP buckets, and hence detach_()
@@ -57,7 +57,7 @@ class dataclasses_common():
                     setattr(self, k.name, getattr(self, k.name).detach())
 
     def allclose(self, other, rtol=1e-13, atol=1e-13):
-        if type(self) != type(other):
+        if type(self) is not type(other):
             return False
         for k in fields(self):
             a, b = getattr(self, k.name), getattr(other, k.name)

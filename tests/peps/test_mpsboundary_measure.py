@@ -120,7 +120,6 @@ def test_finite_spinless_boundary_mps_ctmrg(config_kwargs):
     Nx, Ny = 3, 2
     geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary=boundary)
 
-    mu = 0  # chemical potential
     t = 1  # hopping amplitude
     beta = 0.1
     dbeta = 0.025

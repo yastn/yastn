@@ -1,0 +1,14 @@
+[flake8]
+# Blocking lint gate used by CI (`flake8 .`): pyflakes errors plus a few
+# correctness-relevant pycodestyle checks. Formatting (whitespace, line length)
+# is not enforced repo-wide; new code should still follow PEP 8.
+select = F, E711, E713, E714, E721, E722, E9, W6
+extend-ignore =
+    # star imports are used by design to re-export the public API
+    F403, F405
+per-file-ignores =
+    # __init__ files re-export names
+    __init__.py: F401
+    # syntax showcase included in the docs; assignments illustrate return values
+    tests/tensor/test_syntax.py: F841
+exclude = .git, __pycache__, build, dist, *.egg-info, htmlcov, docs/build, third_party

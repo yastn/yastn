@@ -73,7 +73,7 @@ def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
         raise YastnError('All MpsMpoOBC to add must have equal number of sites.')
     if any(psi.nr_phys != phi.nr_phys for psi in states):
         raise YastnError('All states to add should be either Mps or Mpo.')
-    if any(psi.pC != None for psi in states):
+    if any(psi.pC is not None for psi in states):
         raise YastnError('Absorb central block of MpsMpoOBC-s before calling add.')
     # legf = states[0][phi.first].get_legs(axes=0)
     # legl = states[0][phi.last].get_legs(axes=2)

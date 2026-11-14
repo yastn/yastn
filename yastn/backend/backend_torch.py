@@ -16,7 +16,6 @@
 """Support of torch as a data structure used by yastn."""
 import os
 import warnings
-from itertools import groupby
 from functools import reduce
 import numpy as np
 import torch
@@ -30,7 +29,6 @@ from .linalg.torch_eig_sym import SYMEIG
 
 from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
-from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
 from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
 from ._backend_torch_backwards import kernel_unmerge_scatter
@@ -606,7 +604,7 @@ def pinv(A, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
             out.copy_(result)
             return out
         return result
-    return torch.linalg.pinv(A, atol=atol, rtol=rtol if not rtol is None else rcond, hermitian=hermitian, out=out)
+    return torch.linalg.pinv(A, atol=atol, rtol=rtol if rtol is not None else rcond, hermitian=hermitian, out=out)
 
 
 @torch.no_grad()

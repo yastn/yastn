@@ -202,7 +202,7 @@ def test_generate_mpo_vs_fkron(config_kwargs):
     """ test generate_mpo on simple fermionic examples """
     ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     #
-    cp, c, n, I = ops.cp(), ops.c(), ops.n(), ops.I()
+    cp, c, I = ops.cp(), ops.c(), ops.I()
     #
     O = mps.generate_mpo(I, [mps.Hterm(1., positions=[3, 1, 0, 2], operators=[cp, cp, c, c])], N=4)
     P = yastn.fkron(cp, cp, c, c, sites=(3, 1, 0, 2))
