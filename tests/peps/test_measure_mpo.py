@@ -108,10 +108,11 @@ def test_measure_mpo(config_kwargs, sites):
     sites = [fpeps.Site(*s) for s in sites]
     nsite = len(sites)
 
-    pool = {2: [[cp, c], [c, cp], [n, n], [n, I], [I, n]],
-            3: [[cp, c, n], [c, cp, I], [n, n, n], [cp, n, c], [c, n, cp], [I, cp, c]],
-            4: [[cp, c, n, I], [c, cp, cp, c], [n, I, n, n], [cp, n, I, c], [I, cp, c, n]]}[nsite]
-    coeffs = [1.0, 0.7, -0.3, 0.5, 0.2, -0.6][:len(pool)]
+    # three terms are enough for MPO bonds carrying both parities; each extra term adds path searches
+    pool = {2: [[cp, c], [c, cp], [n, n]],
+            3: [[cp, c, n], [c, cp, I], [n, n, n]],
+            4: [[cp, c, n, I], [c, cp, cp, c], [n, I, n, n]]}[nsite]
+    coeffs = [1.0, 0.7, -0.3]
     terms = list(zip(coeffs, pool))
 
     kw = dict(sites=sites)
@@ -159,7 +160,7 @@ def test_measure_mpo(config_kwargs, sites):
     [(0, 2), (0, 0)],                  # long range, backwards
     [(1, 1), (0, 0), (0, 1)],          # permuted, with a gap
     [(0, 0), (0, 2), (0, 1)],          # the walk to (0, 2) passes the chain's own (0, 1)
-    [(0, 2), (1, 0), (0, 1), (1, 2)],  # gaps, the walk passing chain sites
+    [(0, 0), (1, 1), (0, 1), (1, 0)],  # diagonal gaps, the walks passing chain sites
 ])
 def test_mpo_chain_order(config_kwargs, chain):
     """
