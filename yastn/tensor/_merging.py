@@ -308,7 +308,7 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
     ndimo = len(struct.legs)
     ndimn = len(struct_new.legs)
     meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 3 * ndimn + ndimo)
-    tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), ndimn, sym.NSYM)
+    tnew = np.array(tnew, dtype=np.int64).reshape((len(tnew), ndimn, sym.NSYM))
     ind = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
     ind_u, inv_c = np.unique(ind, return_inverse=True)
 
@@ -501,7 +501,7 @@ def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
 
     ndimo = len(struct.legs)
     meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 4 * ndimo)
-    tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), len(legs_new), sym.NSYM)
+    tnew = np.array(tnew, dtype=np.int64).reshape((len(tnew), len(legs_new), sym.NSYM))
     ind_c = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
 
     if lazy_threshold and bl_new.nblocks and len(ind_c) / bl_new.nblocks < lazy_threshold:
@@ -639,7 +639,7 @@ def _leg_structure_combine_charges_prod(sym, legs_in, t_out, s_out):
 
     teff = sym.fuse(comb_t, s_in, s_out)
 
-    t_out = np.array(t_out, dtype=np.int64).reshape(1, len(t_out), sym.NSYM)
+    t_out = np.array(t_out, dtype=np.int64).reshape((1, len(t_out), sym.NSYM))
     inds = np.any(np.all(teff.reshape(len(teff), 1, sym.NSYM) == t_out, axis=2), axis=1)
     inds = np.flatnonzero(inds)
     indices = indices[inds]

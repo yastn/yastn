@@ -45,3 +45,11 @@ Homepage = "https://github.com/yastn/yastn"
 Documentation = "https://yastn.github.io/yastn/"
 Repository = "https://github.com/yastn/yastn"
 Issues = "https://github.com/yastn/yastn/issues"
+
+[tool.pylint."messages control"]
+disable = [
+    "import-error",                     # optional backends/deps (torch, tapp_torch, ray, nvtx, ...)
+    "no-member",                        # Tensor methods are attached dynamically; backend modules
+    "no-self-argument",                 # sym_* classes are used as namespaces of class-level functions
+    "possibly-used-before-assignment",  # branch-dependent assignments guarded by options
+]

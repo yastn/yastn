@@ -292,7 +292,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block)
 
     if compute_uv and policy == 'fullrank':
-        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, 
+        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes,
             driver=driver, diagnostics=kwargs.get('diagnostics', None))
     elif not compute_uv and policy == 'fullrank':
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
@@ -485,13 +485,13 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         return S
 
     hfsUm = (hfsm[0], _Fusion())
-    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
+    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)  # pylint: disable=used-before-assignment
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     hfsVm = (_Fusion(), hfsm[1])
-    Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
+    Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)  # pylint: disable=used-before-assignment
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)

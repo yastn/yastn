@@ -104,7 +104,7 @@ def extract_dsv_t(t, history):
     return max_dsv
 
 def extract_dsv(history):
-    max_dsv_history = [extract_dsv(t, history) for t in range(len(history) - 1)]
+    max_dsv_history = [extract_dsv_t(t, history) for t in range(len(history) - 1)]
     return max_dsv_history
 
 def running_ave(history, window_size=5):
@@ -629,7 +629,7 @@ def fp_ctmrg(env: EnvCTM,
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
     convergence of the environment tensors.
-    Enables backward differentiation through the fixed-point iteration to compute the gradients of the environment tensors 
+    Enables backward differentiation through the fixed-point iteration to compute the gradients of the environment tensors
     with respect to the state parameters, via `Neumann series expansion
     <https://en.wikipedia.org/wiki/Neumann_series>`_ of the fixed-point iteration.
 

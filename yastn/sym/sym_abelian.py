@@ -88,7 +88,7 @@ class sym_abelian(metaclass=sym_meta):
             return cls.zero()
         if signatures is None:
             signatures = (1,) * len(charges)
-        charges = np.array(charges, dtype=np.int64).reshape(1, len(charges), cls.NSYM)
+        charges = np.array(charges, dtype=np.int64).reshape((1, len(charges), cls.NSYM))
         new_charge = cls.fuse(charges, signatures, new_signature)
         return tuple(new_charge.reshape(cls.NSYM).tolist())
 

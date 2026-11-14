@@ -397,7 +397,7 @@ class FixedPointOpts:
     and the Neumann series in the backward pass takes its iteration budget from
     ``fp.max_sweeps`` and its gradient tolerance from ``fp.corner_tol``.
     The additional configuration specific to fixed point approach is defined here.
-    
+
     Parameters
     ----------
     fwd: CTMOpts
@@ -448,7 +448,7 @@ class FixedPointOpts:
         for name in ('fwd', 'fp'):
             value = getattr(self, name)
             if isinstance(value, dict):
-                object.__setattr__(self, name, make_ctm_opts(**value))
+                object.__setattr__(self, name, make_ctm_opts(**value))  # pylint: disable=not-a-mapping
             elif not isinstance(value, CTMOpts):
                 raise YastnError(
                     f"FixedPointOpts.{name} must be a dict or CTMOpts, "

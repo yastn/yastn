@@ -232,7 +232,7 @@ def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
 
     if out_a == (2, 3):
         axes1 = ((0, 3), (1, 4))  # [b b'] [r r']
-    elif out_a == (3, 2):
+    else:  # out_a == (3, 2):
         axes1 = ((1, 4), (0, 3))  # [r r'] [b b']
     if mode == 'self-b':
         axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
@@ -265,7 +265,7 @@ def append_vec_br(Ac, A, vecbr, op=None, mode='old', in_b=(2, 1), out_a=(0, 1)):
 
     if out_a == (0, 1):
         axes1 = ((0, 3), (1, 4))  # [t t'] [l l']
-    elif out_a == (1, 0):
+    else:  # out_a == (1, 0):
         axes1 = ((1, 4), (0, 3))  # [l l'] [t t']
     if mode == 'self-b':
         axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
@@ -310,7 +310,7 @@ def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
 
     if out_a == (1, 2):
         axes1 = ((0, 3), (1, 4))  # [l l'] [b b']
-    elif out_a == (2, 1):
+    else:  # out_a == (2, 1):
         axes1 = ((1, 4), (0, 3))  # [b b'] [l l']
     if mode == 'self-b':
         axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
@@ -354,7 +354,7 @@ def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
 
     if out_a == (3, 0):
         axes1 = ((1, 4), (0, 3))  # [r r'] [t t']
-    elif out_a == (0, 3):
+    else:  # out_a == (0, 3):
         axes1 = ((0, 3), (1, 4))  # [t t'] [r r']
     if mode == 'self-b':
         axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
@@ -497,12 +497,12 @@ def update_env_fetch_args( site, env, move: str ):
 
     Returns:
         Returns arguments for the update_env_{l,r,t,b} functions in the following order::
-            (DoublePepsTensor,Tensor,Tensor,Tensor) or (None,)*4 
+            (DoublePepsTensor,Tensor,Tensor,Tensor) or (None,)*4
             + (Site,Tensor,Tensor,Tensor) or (None,)*4
             + (Site,Tensor,Tensor,Tensor) or (None,)*4
     """
     assert move in ['l', 'r', 't', 'b'], "move must be one of 'l', 'r', 't', 'b'"
-    
+
     psi= env.psi
     if move in 'l':
         l = psi.nn_site(site, d='l')
@@ -514,7 +514,7 @@ def update_env_fetch_args( site, env, move: str ):
             + ((bl, env.proj[bl].hlt, env[l].b, env[l].bl, ) if bl else (None,)*4)
         return res
 
-    if move in 'r': 
+    if move in 'r':
         r = psi.nn_site(site, d='r')
         tr = psi.nn_site(site, d='tr')
         br = psi.nn_site(site, d='br')
@@ -523,7 +523,7 @@ def update_env_fetch_args( site, env, move: str ):
             + ((tr, env.proj[tr].hrb, env[r].t, env[r].tr,) if tr else (None,)*4) \
             + ((br, env.proj[br].hrt, env[r].br, env[r].b, ) if br else (None,)*4)
         return res
-    
+
     if move in 't':
         t = psi.nn_site(site, d='t')
         tl = psi.nn_site(site, d='tl')
@@ -534,7 +534,7 @@ def update_env_fetch_args( site, env, move: str ):
             + ((tr, env.proj[tr].vtl, env[t].tr, env[t].r, ) if tr else (None,)*4)
         return res
 
-    if move in 'b': 
+    if move in 'b':
         b = psi.nn_site(site, d='b')
         bl = psi.nn_site(site, d='bl')
         br = psi.nn_site(site, d='br')
@@ -555,9 +555,9 @@ def update_env_dir( move: str, *args ):
 
     args:
         Arguments as returned by :func:`update_env_fetch_args`.
-    
+
     Returns:
-        Updated environment tensors as returned by the corresponding 
+        Updated environment tensors as returned by the corresponding
         :func:`update_env_{l,r,t,b}` function.
     """
     assert move in ['l', 'r', 't', 'b'], "move must be one of 'l', 'r', 't', 'b'"
@@ -591,7 +591,7 @@ def update_env_l( psi_l, env_l_l, proj_l_hlt, proj_l_hlb,
     if site_bl is not None:
         tmp = tensordot(env_l_b, env_l_bl @ proj_bl_hlt, axes=((2, 1), (0, 1)))
         res_env_bl = tmp / tmp.norm(p='inf')
-    
+
     return res_env_l, res_env_tl, res_env_bl
 
 def update_env_r( psi_r, env_r_r, proj_r_hrb, proj_r_hrt,
@@ -614,7 +614,7 @@ def update_env_r( psi_r, env_r_r, proj_r_hrb, proj_r_hrt,
     if site_br is not None:
         tmp = tensordot(proj_br_hrt, env_r_br @ env_r_b, axes=((0, 1), (0, 1)))
         res_env_br = tmp / tmp.norm(p='inf')
-    
+
     return res_env_r, res_env_tr, res_env_br
 
 def update_env_t( psi_t, env_t_t, proj_t_vtl, proj_t_vtr,
@@ -637,20 +637,20 @@ def update_env_t( psi_t, env_t_t, proj_t_vtl, proj_t_vtr,
     if site_tr is not None:
         tmp = tensordot(proj_tr_vtl, env_t_tr @ env_t_r, axes=((0, 1), (0, 1)))
         res_env_tr = tmp / tmp.norm(p='inf')
-    
+
     return res_env_t, res_env_tl, res_env_tr
 
-def update_env_b( psi_b, env_b_b, proj_b_vbr, proj_b_vbl, 
+def update_env_b( psi_b, env_b_b, proj_b_vbr, proj_b_vbl,
                     site_bl : Site, proj_bl_vbr, env_b_bl, env_b_l,
-                    site_br : Site, proj_br_vbl, env_b_r, env_b_br, ): 
-    
+                    site_br : Site, proj_br_vbl, env_b_r, env_b_br, ):
+
     res_env_b= None
-    if psi_b is not None:   
+    if psi_b is not None:
         tmp = tensordot(proj_b_vbr, env_b_b, axes=(0, 0))
         tmp = tensordot(tmp, psi_b, axes=((2, 0), (2, 3)))
         tmp = tensordot(tmp, proj_b_vbl, axes=((1, 3), (0, 1)))
         res_env_b = tmp / tmp.norm(p='inf')
-    
+
     res_env_bl= None
     if site_bl is not None:
         tmp = tensordot(proj_bl_vbr, env_b_bl @ env_b_l, axes=((0, 1), (0, 1)))
@@ -660,5 +660,5 @@ def update_env_b( psi_b, env_b_b, proj_b_vbr, proj_b_vbl,
     if site_br is not None:
         tmp = tensordot(env_b_r, env_b_br @ proj_br_vbl, axes=((2, 1), (0, 1)))
         res_env_br = tmp / tmp.norm(p='inf')
-    
+
     return res_env_b, res_env_bl, res_env_br

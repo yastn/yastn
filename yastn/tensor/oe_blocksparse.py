@@ -446,7 +446,7 @@ def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swa
     if not unroll_labels:
         pf_trim_per_combo[0] = None
         if collect_dim_overrides:
-            dim_overrides_per_combo[0] = {}
+            dim_overrides_per_combo[0] = {}  # pylint: disable=unsupported-assignment-operation
         return [0], pf_trim_per_combo, dim_overrides_per_combo
 
     axis_lookup = _build_unroll_axis_lookup(index_groups, unroll_labels)
@@ -465,7 +465,7 @@ def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swa
         surviving.append(n)
         pf_trim_per_combo[n] = pf_trim
         if collect_dim_overrides:
-            dim_overrides_per_combo[n] = _post_trim_label_dims(masked, index_groups, pf_trim)
+            dim_overrides_per_combo[n] = _post_trim_label_dims(masked, index_groups, pf_trim)  # pylint: disable=unsupported-assignment-operation
     return surviving, pf_trim_per_combo, dim_overrides_per_combo
 
 

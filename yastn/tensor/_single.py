@@ -371,7 +371,7 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> 'Tensor':
         # case leg is not fused:
         if not leg.is_fused():
             tDconj= np.array(leg.t, dtype=np.int64)
-            tDconj= a.config.sym.fuse(tDconj.reshape(-1,1,leg.sym.NSYM), (leg.s,), -leg.s)
+            tDconj= a.config.sym.fuse(tDconj.reshape((-1,1,leg.sym.NSYM)), (leg.s,), -leg.s)
             tDconj= tuple(map(tuple, tDconj))
             tDs= dict(zip(tDconj, leg.D))
             return Leg(a.config.sym, -leg.s, t= tuple(tDs.keys()), D= tuple(tDs.values()))

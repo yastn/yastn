@@ -40,11 +40,14 @@ from ._output import *
 from ._single import *
 from ._tests import *
 from .linalg import *
+from ._auxiliary import _config, _struct, _compress_slices
+from ._merging import _Fusion
 from . import _algebra
 from . import _contractions
 from . import _control_lru
 from . import _einsum
 from . import _initialize
+from . import _legbasic
 from . import _legs
 from . import _merging
 from . import _output
@@ -67,7 +70,7 @@ __all__.extend(_tests.__all__)
 __all__.extend(linalg.__all__)
 
 
-class Tensor:
+class Tensor:  # pylint: disable=function-redefined  # Tensor only imported under TYPE_CHECKING in submodules
     # Define a tensor with abelian symmetries and operations on such tensor(s).
 
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
