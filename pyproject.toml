@@ -30,7 +30,7 @@ dynamic = ["version"]
 
 [tool.setuptools.packages.find]
 include = ["yastn*"]
-exclude = ["docs*", "tests*", "experimental*"]
+exclude = ["docs*", "tests*"]
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "pytest-randomly", "numpy!=2.4.5", "pytest-xdist"]

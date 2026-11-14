@@ -64,7 +64,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest -v --ignore ./experimental;
+          pytest -v;
           pytest -v --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --tensordot_policy no_fusion ./tests/tensor;
 
