@@ -241,7 +241,7 @@ def splitt(b, eq_it):
     #    return [single_term(op=op)]
 
     id_basic_operation = [i for i, x in enumerate(b) if x in basic_operation]
-    if not "sum" in b and not id_basic_operation and '(' not in b:
+    if "sum" not in b and not id_basic_operation and '(' not in b:
         # There is no recognized operation between objects. Assume it is a multiplication.
         op = tuple([get_variable(ib) for ib in b]) if isinstance(b, list) else (get_variable(b),)
         return [single_term(op=op)]

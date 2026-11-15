@@ -16,6 +16,7 @@
 from dataclasses import dataclass, fields
 
 from ....tensor import Tensor, YastnError
+from ....tensor._output import _to_nonsymmetric_unfused
 
 __all__ = ["EnvBP_local", "EnvCTM_local", "EnvCTM_projectors", "EnvCTM_c4v_local", "EnvCTM_c4v_projectors", "Gauge"]
 
@@ -26,6 +27,16 @@ class dataclasses_common():
     def to(self, device: str=None, dtype: str=None, **kwargs):
         return type(self)(**{k.name: getattr(self, k.name).to(device=device, dtype=dtype, **kwargs) for k in fields(self)
                              if getattr(self, k.name) is not None})
+
+    def to_nonsymmetric(self, native=False, key=None):
+        r"""
+        New instance with all tensors converted by :meth:`yastn.Tensor.to_nonsymmetric`.
+        Hard-fused legs (e.g., ket and bra legs fused in environment tensors) are unfused,
+        converted, and fused back, keeping their fusion structure.
+        """
+        return type(self)(**{k.name: _to_nonsymmetric_unfused(getattr(self, k.name), axes=range(getattr(self, k.name).ndim),
+                                                               native=native, key=key)
+                             for k in fields(self) if getattr(self, k.name) is not None})
 
     def copy(self):
         return type(self)(**{k.name: getattr(self, k.name).copy() for k in fields(self)
@@ -48,7 +59,7 @@ class dataclasses_common():
             if getattr(self, k.name) is not None:
                 try:
                     getattr(self, k.name).detach_()
-                except RuntimeError as e:
+                except RuntimeError:
                     # NOTE
                     # RuntimeError: Can't detach views in-place. Use detach() instead. If you are using DistributedDataParallel (DDP)
                     # for training, and gradient_as_bucket_view is set as True, gradients are views of DDP buckets, and hence detach_()
@@ -57,7 +68,7 @@ class dataclasses_common():
                     setattr(self, k.name, getattr(self, k.name).detach())
 
     def allclose(self, other, rtol=1e-13, atol=1e-13):
-        if type(self) != type(other):
+        if type(self) is not type(other):
             return False
         for k in fields(self):
             a, b = getattr(self, k.name), getattr(other, k.name)

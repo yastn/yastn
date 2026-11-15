@@ -50,8 +50,8 @@ def _test_tensordot_grad(a, b, axes, dtype):
 
     a.requires_grad_(True)
     b.requires_grad_(True)
-    if not (a.grad()._data is None): a.grad()._data.zero_()
-    if not (b.grad()._data is None): b.grad()._data.zero_()
+    if a.grad()._data is not None: a.grad()._data.zero_()
+    if b.grad()._data is not None: b.grad()._data.zero_()
     ab= yastn.tensordot(a, b, axes=axes)
     cost_f = ab.norm()
     cost_f.backward()
@@ -73,8 +73,8 @@ def _test_tensordot_grad_mixed(a, b, axes):
 
     a.requires_grad_(True)
     b.requires_grad_(True)
-    if not (a.grad()._data is None): a.grad()._data.zero_()
-    if not (b.grad()._data is None): b.grad()._data.zero_()
+    if a.grad()._data is not None: a.grad()._data.zero_()
+    if b.grad()._data is not None: b.grad()._data.zero_()
     ab = yastn.tensordot(a, b, axes=axes)
     cost_f = ab.norm()
     cost_f.backward()
@@ -105,8 +105,8 @@ def _test_tensordot_grad_mixed_dtype(a, b, axes):
 
     a.requires_grad_(True)
     b.requires_grad_(True)
-    if not (a.grad()._data is None): a.grad()._data.zero_()
-    if not (b.grad()._data is None): b.grad()._data.zero_()
+    if a.grad()._data is not None: a.grad()._data.zero_()
+    if b.grad()._data is not None: b.grad()._data.zero_()
     ab = yastn.tensordot(a, b, axes=axes)
     cost_f = ab.norm()
     cost_f.backward()
@@ -216,7 +216,6 @@ def test_tensordot_fuse_hard_backward_1(config_kwargs,dtype):
 
 @torch_test
 def test_tensordot_fuse_hard_backward_12(config_kwargs):
-    import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
@@ -260,7 +259,6 @@ def test_tensordot_fuse_hard_backward_13(config_kwargs):
 @torch_test
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_tensordot_fuse_hard_backward_2(config_kwargs, remove_blocks):
-    import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
@@ -306,7 +304,6 @@ def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs, remove_blocks):
 @torch_test
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_tensordot_fuse_hard_backward_22(config_kwargs, remove_blocks):
-    import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
@@ -377,7 +374,7 @@ def test_tensordot_fuse_hard_backward_3(config_kwargs, dtype, remove_blocks):
 
 
 @torch_test
-def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs):
+def test_tensordot_fuse_hard_backward_mixed_dtype_axes_order(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
     config_U1.backend.random_seed(seed=0)

@@ -473,7 +473,11 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
             pre_initial_ = "EAT"
         elif pre_initial == "ZMT1svd":
             pre_initial_ = "SVD"
+        else:
+            raise YastnError(f"{pre_initial=} not recognized.")
         (MA, MB), error2, _ = initial_truncation_ZMT1(R0, R1, fgf, opts_svd_pre, fRR, RRgRR, pinv_cutoffs, pre_initial=pre_initial_)
+    else:
+        raise YastnError(f"{pre_initial=} not recognized.")
 
     G = fgf.unfuse_legs(axes=1)
     G = tensordot(G, R0, axes=(1, 0))
@@ -701,8 +705,8 @@ def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
     info['best_method'] = 'bipartite'
     info['truncation_errors'] = {'bipartite': error2 ** 0.5}
     info['truncation_error'] = error2 ** 0.5
-    info['pinv_cutoffs'] = pinv_c
-    return M0, M1, info
+    info['pinv_cutoffs'] = pinv_c  # pylint: disable=used-before-assignment  # set in the cutoff loop
+    return M0, M1, info  # pylint: disable=used-before-assignment
 
 
 def accumulated_truncation_error(infoss, statistics='mean'):
@@ -815,7 +819,7 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
             error2_tmp = calculate_truncation_error2(M0_tmp @ M1_tmp, fgf, fRR, RRgRR)
             if error2_tmp < error2:
                 M0, M1, error2, pinv_c = M0_tmp, M1_tmp, error2_tmp, c_off
-    return (M0, M1), error2, pinv_c, eat_metric_error
+    return (M0, M1), error2, pinv_c, eat_metric_error  # pylint: disable=used-before-assignment  # set in the cutoff loop
 
 
 def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter):
@@ -869,4 +873,4 @@ def optimal_pinv(g, j, pinv_cutoffs, error_fun):
             error2_tmp = error_fun(M_tmp)
             if error2_tmp < error2:
                 M_new, error2, pinv_c = M_tmp, error2_tmp, cutoff
-    return M_new, error2, pinv_c
+    return M_new, error2, pinv_c  # pylint: disable=used-before-assignment  # set in the cutoff loop

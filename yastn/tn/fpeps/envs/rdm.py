@@ -110,14 +110,10 @@ def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False,
     assert rdm.ndim % 2 == 0, "invalid rank of RDM"
     nsites = rdm.ndim // 2
 
-    trace_axes=None
-    conj_order=None
     if order=="interleaved":
         trace_order= (tuple(2*i for i in range(nsites)),tuple(2*i+1 for i in range(nsites)))
-        conj_order= sum(zip(trace_order[1],trace_order[0]),())
     elif order=="braket":
         trace_order= (tuple(i for i in range(nsites)),tuple(i+nsites for i in range(nsites)))
-        conj_order= trace_order[1]+trace_order[0]
     else:
         raise ValueError(f"order {order} not implemented.")
 
@@ -827,9 +823,6 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
         Expectation value or a list of expectations values of provided `op`.
     """
     rdm, norm = rdm2x2(s0, psi, env)  # s0 s0' s1 s1' s2 s2' s3 s3'
-    s1 = psi.nn_site(s0, "b")
-    s2 = psi.nn_site(s0, "r")
-    s3 = psi.nn_site(s2, "b")
     sym = psi.config.sym
 
     # def _eval_op(O0, O1, O2, O3):

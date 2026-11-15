@@ -94,7 +94,7 @@ class Leg:
                 raise YastnError('Number of provided charges and bond dimensions do not match sym.NSYM')
             #
             t = np.array(t, dtype=np.int64)
-            newt = list(map(tuple, self.sym.fuse(t.reshape(lD, 1, nsym), (self.s,), self.s).tolist()))
+            newt = list(map(tuple, self.sym.fuse(t.reshape((lD, 1, nsym)), (self.s,), self.s).tolist()))
             oldt = list(map(tuple, t.reshape(lD, nsym).tolist()))
             D = np.array(D, dtype=np.int64).reshape(lD).tolist()
             if oldt != newt:

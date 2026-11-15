@@ -19,6 +19,7 @@ from numbers import Integral
 from typing import Iterator, Sequence
 
 from ...tensor import YastnError, Tensor, Leg
+from ...tensor._output import _check_not_fermionic, _to_nonsymmetric_unfused
 from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
 
 TENSOR_CLASSES = {"Tensor": Tensor,
@@ -160,6 +161,48 @@ class _MpsMpoParent:
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.conj()
+        return phi
+
+    def to_nonsymmetric(self, native=False, key=None) -> _MpsMpoParent:
+        r"""
+        New MPS/MPO with all tensors converted by :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Legs of all tensors are assumed to be consistent, i.e., connected legs carry the same charge sectors,
+        so that each tensor can be converted independently and the dense legs match.
+        Hard-fused physical legs are unfused, converted, and fused back,
+        so that their fusion structure is kept in the non-symmetric tensors.
+
+        Operators to be used with the converted MPS/MPO should be converted with the same ``key``.
+        Where they do not carry all charge sectors of the physical legs, pass them in ``legs``
+        of :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Parameters
+        ----------
+        native: bool
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        key: Callable | str | None
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Raises
+        ------
+        YastnError
+            If the config is fermionic, as swap gates act trivially on non-symmetric tensors,
+            or if any virtual leg is fused, which is not supported.
+        """
+        _check_not_fermionic(self.config, type(self).__name__)
+        phi = self.shallow_copy()
+        for ind, ten in phi.A.items():  # includes the central block A[pC], if present
+            if isinstance(ten, Tensor):
+                # legs are ordered (left, ket, right) for MPS and (left, ket, right, bra) for MPO;
+                # the central block has two virtual legs
+                virtual_axes = (0, 1) if ten.ndim == 2 else (0, 2)
+                if any(ten.get_legs(axes=ax).is_fused() for ax in virtual_axes):
+                    raise YastnError(f"{type(self).__name__}.to_nonsymmetric() is not supported for fused virtual legs.")
+                phys_axes = tuple(ax for ax in range(ten.ndim) if ax not in virtual_axes)
+                phi.A[ind] = _to_nonsymmetric_unfused(ten, axes=phys_axes, native=native, key=key)
+            else:
+                phi.A[ind] = ten.to_nonsymmetric(native=native, key=key)
         return phi
 
     def transpose(self) -> _MpsMpoParent:
@@ -307,7 +350,7 @@ class _MpsMpoParent:
         psi = self.shallow_copy()
         try:
             factor = psi.config.backend.to_numpy(psi.factor)
-        except:
+        except Exception:
             factor = psi.factor
         psi.absorb_central_()  # make sure central block is eliminated
         file.create_dataset(my_address+'/N', data=psi.N)

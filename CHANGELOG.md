@@ -1,3 +1,11 @@
+15-11-2026
+- new `to_nonsymmetric(native=False, key=None)` for `mps.MpsMpoOBC`/`MpoPBC`, `fpeps.Peps`, `fpeps.EnvCTM`
+  and `fpeps.EnvBoundaryMPS`, converting all tensors with `Tensor.to_nonsymmetric`. Hard-fused physical legs
+  (and ket-bra legs of environment tensors) keep their fusion; connected CTM environment legs are filled in
+  to a common set of charge sectors. Raises `YastnError` for fermionic configs (swap gates act trivially on
+  non-symmetric tensors) and for MPS/MPO with fused virtual legs.
+
+
 10-10-2026
 - license changed from Apache-2.0 to GPL-3.0-or-later; LICENSE, package metadata and
   source-file headers updated accordingly.

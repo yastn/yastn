@@ -15,11 +15,10 @@
 # ==============================================================================
 from __future__ import annotations
 import logging
-from typing import Callable, Sequence
+from typing import Sequence
 
 from ._env_ctm import EnvCTM, proj_corners
 from ._ctm_opts import CTMOpts
-from ._env_contractions import *
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors, EnvCTM_local
 from .._geometry import Lattice
 from .._peps import Peps2Layers

@@ -17,7 +17,7 @@ import logging
 import os
 from functools import lru_cache
 from contextlib import nullcontext
-from itertools import product, accumulate
+from itertools import product
 import time
 from typing import Hashable, Mapping, Sequence, Union
 
@@ -26,7 +26,7 @@ import opt_einsum as oe  # type: ignore
 from opt_einsum.contract import PathInfo  # type: ignore
 try:
     from opt_einsum.contract import _VALID_CONTRACT_KWARGS
-except:
+except ImportError:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
 from .._profile import nvtx, nsys_profile
@@ -446,7 +446,7 @@ def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swa
     if not unroll_labels:
         pf_trim_per_combo[0] = None
         if collect_dim_overrides:
-            dim_overrides_per_combo[0] = {}
+            dim_overrides_per_combo[0] = {}  # pylint: disable=unsupported-assignment-operation
         return [0], pf_trim_per_combo, dim_overrides_per_combo
 
     axis_lookup = _build_unroll_axis_lookup(index_groups, unroll_labels)
@@ -465,7 +465,7 @@ def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swa
         surviving.append(n)
         pf_trim_per_combo[n] = pf_trim
         if collect_dim_overrides:
-            dim_overrides_per_combo[n] = _post_trim_label_dims(masked, index_groups, pf_trim)
+            dim_overrides_per_combo[n] = _post_trim_label_dims(masked, index_groups, pf_trim)  # pylint: disable=unsupported-assignment-operation
     return surviving, pf_trim_per_combo, dim_overrides_per_combo
 
 
@@ -777,7 +777,6 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         reads only from shared immutable state; writes only to the local dict.
         """
         local_partials = {}
-        _cfg = iter_tensors[0].config
         for n, sl_map, output_pos_key in assigned:
             with stream_ctx:
                 tag = f"_contract_with_sliced_unroll {n}"
@@ -913,13 +912,13 @@ def _convert_path_to_ncon_args(*args, **kwargs):
         for n,p in enumerate(path):
             ig2= in_igs.pop(p[1])
             ig1= in_igs.pop(p[0])
-            i_ig2= orig_ig_inds.pop(p[1])
-            i_ig1= orig_ig_inds.pop(p[0])
+            orig_ig_inds.pop(p[1])
+            orig_ig_inds.pop(p[0])
             orig_ig_inds.append(-n-1)
 
             # find common indices - to be contracted over
             common_inds= set(ig1).intersection(set(ig2))
-            out_inds= list([ind for ind in ig1+ig2 if not (ind in common_inds)])
+            out_inds= list([ind for ind in ig1+ig2 if ind not in common_inds])
             # print(f"{n} {p}->{(i_ig1,i_ig2)} {ig1} {ig2} common {common_inds} -> {out_inds} boundary im {im}")
 
             # assign ascending positive labels to common indices
@@ -1248,7 +1247,7 @@ def _get_contraction_path_info(path, *operands, **kwargs):
             contract_tuple = oe.helpers.find_contraction(
                 contract_inds, input_sets, output_set
             )
-        except TypeError as e:
+        except TypeError:
             # inputt_sets have to be frozenset sets for v3.4.0
             contract_tuple = oe.helpers.find_contraction(
                 contract_inds, [frozenset(s) for s in input_sets], output_set
@@ -1354,7 +1353,6 @@ def contract_with_unroll(*args, **kwargs):
         :meth:`yastn.ncon`.  Applied to the input tensors before the path search and
         any unrolling, which it commutes with.
     """
-    _cfg = args[0].config
     charge_swap = kwargs.pop("charge_swap", None)
     if charge_swap:
         args = list(args)

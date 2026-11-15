@@ -20,6 +20,7 @@ from ._gates_auxiliary import match_ancilla, apply_gate_onsite
 from .envs._env_contractions import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from ...tensor import tensordot, leg_product, YastnError, SpecialTensor, Tensor
 from ...tensor._auxiliary import _clear_axes
+from ...tensor._output import _to_nonsymmetric_unfused
 
 
 _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
@@ -220,6 +221,19 @@ class DoublePepsTensor(SpecialTensor):
         """
         op_copy = self.op.copy() if self.op is not None else None
         return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), trans=self.trans, op=op_copy, swaps=self.swaps)
+
+    def to_nonsymmetric(self, native=False, key=None):
+        r"""
+        New DoublePepsTensor with constituent tensors converted by :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        A hard-fused physical leg of ket and bra tensors, and hard-fused legs of the operator,
+        are unfused, converted, and fused back. Other legs are assumed not to be fused (this is not checked).
+        ``native`` and ``key`` are passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+        """
+        op_ns = _to_nonsymmetric_unfused(self.op, axes=(0, 1), native=native, key=key) if self.op is not None else None
+        return DoublePepsTensor(bra=_to_nonsymmetric_unfused(self.bra, axes=(4,), native=native, key=key),
+                                ket=_to_nonsymmetric_unfused(self.ket, axes=(4,), native=native, key=key),
+                                trans=self.trans, op=op_ns, swaps=self.swaps)
 
     def detach(self):
         r""" Return a detached DoublePepsTensor with constituent tensors detached from the computational graph. """

@@ -127,7 +127,7 @@ class SquareLattice():
 
     def __eq__(self, other):
         return isinstance(other, SquareLattice) and \
-               type(self) == type(other) and \
+               type(self) is type(other) and \
                self._periodic == other._periodic and \
                self._dims == other._dims and \
                self._sites == other._sites and \
@@ -529,6 +529,25 @@ class Lattice():
         for ind in self._site_data:
             if self._site_data[ind] is not None:
                 net._site_data[ind] = self._site_data[ind].to(device=device, dtype=dtype, **kwargs)
+        return net
+
+    def to_nonsymmetric(self, native=False, key=None) -> Lattice:
+        r"""
+        New instance with each object converted by its own ``to_nonsymmetric`` method,
+        e.g., :meth:`yastn.Tensor.to_nonsymmetric` for tensors.
+
+        Parameters
+        ----------
+        native: bool
+            Passed to ``to_nonsymmetric`` of each object.
+
+        key: Callable | str | None
+            Passed to ``to_nonsymmetric`` of each object.
+        """
+        net = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].to_nonsymmetric(native=native, key=key)
         return net
 
     def clone(self) -> Lattice:

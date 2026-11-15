@@ -1,4 +1,4 @@
-from setuptools import setup, Extension
+from setuptools import setup
 from torch.utils import cpp_extension
 
 setup(name='fused_transpose_merge_1d',

@@ -145,7 +145,7 @@ def test_dmrg_XX_model_dense(config_kwargs, tol=1e-6):
     # target some sectors for occupation. This is not necessary
     # but we do it for the sake of clarity and testing.
     #
-    psis = run_dmrg(psi, H, O_occ, Eng_gs, occ_gs, opts_svd, tol)
+    run_dmrg(psi, H, O_occ, Eng_gs, occ_gs, opts_svd, tol)
     #
     # _dmrg can be executed as a generator to monitor states
     # between dmrg sweeps. This is done by setting `iterator=True`.

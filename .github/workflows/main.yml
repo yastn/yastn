@@ -50,21 +50,20 @@ jobs:
       - name: setup deps
         run: |
             pip install ".[test]";
-            pip install flake8 pylint;
+            pip install flake8 "pylint~=3.3";
 
       - name: static analysis flake8
-        run: |
-            flake8 . --count --select=E9,F63,F7,F82 --ignore=F821 --show-source --statistics;
-            flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics;
+        # rules are configured in .flake8
+        run: flake8 . --count --show-source --statistics
 
-      - name: static analysis py_lint
-        continue-on-error: true
-        run: pylint -d C0301,C0103,W0212 ./yastn/
+      - name: static analysis pylint
+        # errors only; disabled checks are configured in pyproject.toml
+        run: pylint --errors-only yastn
 
       # Run tests
       - name: tests
         run: |
-          pytest -v --ignore ./experimental;
+          pytest -v;
           pytest -v --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --tensordot_policy no_fusion ./tests/tensor;
 
@@ -92,22 +91,21 @@ jobs:
 
       - name: setup deps
         run: |
-          pip install flake8 pylint;
-          pip install numpy scipy primme
-          pip install .[io,test]
+          pip install flake8 "pylint~=3.3";
+          pip install numpy scipy
+          pip install .[test]
 
       - name: setup pytorch
         run: |
             pip install torch==2.10 --index-url https://download.pytorch.org/whl/cpu
 
       - name: static analysis flake8
-        run: |
-            flake8 . --count --select=E9,F63,F7,F82 --ignore=F821 --show-source --statistics;
-            flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics;
+        # rules are configured in .flake8
+        run: flake8 . --count --show-source --statistics
 
-      - name: static analysis py_lint
-        continue-on-error: true
-        run: pylint -d C0301,C0103,W0212 ./yastn/
+      - name: static analysis pylint
+        # errors only; disabled checks are configured in pyproject.toml
+        run: pylint --errors-only yastn
 
       # Run tests
       - name: tests

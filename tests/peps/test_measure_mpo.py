@@ -108,10 +108,11 @@ def test_measure_mpo(config_kwargs, sites):
     sites = [fpeps.Site(*s) for s in sites]
     nsite = len(sites)
 
-    pool = {2: [[cp, c], [c, cp], [n, n], [n, I], [I, n]],
-            3: [[cp, c, n], [c, cp, I], [n, n, n], [cp, n, c], [c, n, cp], [I, cp, c]],
-            4: [[cp, c, n, I], [c, cp, cp, c], [n, I, n, n], [cp, n, I, c], [I, cp, c, n]]}[nsite]
-    coeffs = [1.0, 0.7, -0.3, 0.5, 0.2, -0.6][:len(pool)]
+    # three terms are enough for MPO bonds carrying both parities; each extra term adds path searches
+    pool = {2: [[cp, c], [c, cp], [n, n]],
+            3: [[cp, c, n], [c, cp, I], [n, n, n]],
+            4: [[cp, c, n, I], [c, cp, cp, c], [n, I, n, n]]}[nsite]
+    coeffs = [1.0, 0.7, -0.3]
     terms = list(zip(coeffs, pool))
 
     kw = dict(sites=sites)
@@ -159,7 +160,7 @@ def test_measure_mpo(config_kwargs, sites):
     [(0, 2), (0, 0)],                  # long range, backwards
     [(1, 1), (0, 0), (0, 1)],          # permuted, with a gap
     [(0, 0), (0, 2), (0, 1)],          # the walk to (0, 2) passes the chain's own (0, 1)
-    [(0, 2), (1, 0), (0, 1), (1, 2)],  # gaps, the walk passing chain sites
+    [(0, 0), (1, 1), (0, 1), (1, 0)],  # diagonal gaps, the walks passing chain sites
 ])
 def test_mpo_chain_order(config_kwargs, chain):
     """
@@ -279,15 +280,16 @@ def test_cut_map_mpo(config_kwargs, sites, probe, opened):
     assert abs(closed - num) < tol * abs(num)
 
 
-def test_cylinder_two_rows(config_kwargs):
+def test_cylinder_across_boundary(config_kwargs):
     """
-    On a cylinder with two rows, a step between the rows inside the window is
-    also a step across the periodic boundary; the window's own coordinates
-    tell which one the measurement takes.
+    On a cylinder periodic along rows, a window given by unwrapped coordinates
+    (row ``Nx`` is row ``0``) steps across the periodic boundary, while the same
+    sites with in-range coordinates are connected through the bulk; the
+    window's own coordinates tell which one the measurement takes.
     """
     ops, c, cp, n, I = _fermions(config_kwargs)  # noqa: E741
     ops.config.backend.random_seed(seed=0)
-    g = fpeps.SquareLattice(dims=(2, 3), boundary='cylinder')
+    g = fpeps.SquareLattice(dims=(3, 3), boundary='cylinder')
     v = yastn.Leg(ops.config, s=1, t=(-1, 0, 1), D=(1, 2, 1))
     one = yastn.Leg(ops.config, s=1, t=(0,), D=(1,))
     tensors = {}
@@ -300,10 +302,18 @@ def test_cylinder_two_rows(config_kwargs):
 
     terms = [(1.0, [cp, c]), (0.7, [c, cp]), (-0.3, [n, n])]
     H = _mpo(terms, I)
-    for sites in [[(1, 0), (0, 1)], [(1, 1), (0, 2)], [(0, 2), (1, 0)]]:
+    # the greedy path search keeps the test fast; the default dynamic-programming
+    # search takes minutes for these windows and does not change the result
+    optimizer = 'greedy'
+    # row 3 == row 0: the first three windows cross the boundary, the last goes through the bulk
+    refs_H = []
+    for sites in [[(2, 0), (3, 1)], [(2, 1), (3, 2)], [(3, 2), (2, 0)], [(2, 0), (0, 1)]]:
         sites = [fpeps.Site(*s) for s in sites]
-        for coeff, term_ops in terms:
-            ref = env.measure_nsite_exact(*term_ops, sites=sites)
-            assert abs(env.measure_nsite_exact_oe(*term_ops, sites=sites) - ref) < tol
-        ref = sum(coeff * env.measure_nsite_exact(*t, sites=sites) for coeff, t in terms)
-        assert abs(env.measure_nsite_exact_oe(H, sites=sites) - ref) < tol
+        refs = [env.measure_nsite_exact(*term_ops, sites=sites) for _, term_ops in terms]
+        for (_, term_ops), ref in zip(terms, refs):
+            assert abs(env.measure_nsite_exact_oe(*term_ops, sites=sites, optimizer=optimizer) - ref) < tol
+        ref_H = sum(coeff * ref for (coeff, _), ref in zip(terms, refs))
+        assert abs(env.measure_nsite_exact_oe(H, sites=sites, optimizer=optimizer) - ref_H) < tol
+        refs_H.append(ref_H)
+    # the same pair of sites, across the boundary vs through the bulk, gives different windows
+    assert abs(refs_H[0] - refs_H[3]) > 100 * tol

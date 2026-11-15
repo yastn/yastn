@@ -15,7 +15,6 @@
 # ==============================================================================
 """ Building Krylov space. """
 from __future__ import annotations
-from typing import TYPE_CHECKING
 from itertools import islice
 from typing import Sequence, TypeVar
 
@@ -24,7 +23,7 @@ import scipy.sparse.linalg as spla
 
 from ..initialize import zeros
 from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask, Tensor
-from ..tensor._auxiliary import _clear_axes, _unpack_axes, get_blocks, find_index, convert_to_tuples_and_slices
+from ..tensor._auxiliary import _clear_axes, _unpack_axes, get_blocks, find_index
 from ..tensor._tests import _test_axes_all
 from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
@@ -514,7 +513,6 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
 
             # 2) identify charge sectors that contain the degenerate subspace
             mask = C > 1.0e-14
-            C0 = C[np.ix_(np.any(mask, axis=1), np.any(mask, axis=0))]
 
             # non-zero C_sectors. In each row, there are nzC_secs.shape[1] sectors, with charges in last dimension of nzC_secs
             nzC_secs = C_secs[np.ix_(np.any(mask, axis=1), np.any(mask, axis=0))]

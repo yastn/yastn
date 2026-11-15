@@ -174,7 +174,8 @@ def test_ctmrg_measure_2x1(config_kwargs, env_init):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 
     def _measure_oe(env, *operators, sites):
-        return env.measure_nsite_exact_oe(*operators, sites=sites)
+        # greedy path search: the default dynamic-programming search dominates the runtime here
+        return env.measure_nsite_exact_oe(*operators, sites=sites, optimizer="greedy")
 
     for dims in [(1, 2), (2, 1)]:
         g = fpeps.SquareLattice(dims=dims, boundary='infinite')
@@ -408,7 +409,8 @@ def test_measure_nsite_exact_oe_unroll_fermionic(config_kwargs, dims):
         env.ctmrg_(opts_svd={"D_total": 3}, max_sweeps=2)
 
         def _measure(*operators, sites, **kwargs):
-            return env.measure_nsite_exact_oe(*operators, sites=sites, **kwargs)
+            # greedy path search: the default dynamic-programming search dominates the runtime here
+            return env.measure_nsite_exact_oe(*operators, sites=sites, optimizer="greedy", **kwargs)
 
         val = -1 / 3
         bond = [*g.sites()]

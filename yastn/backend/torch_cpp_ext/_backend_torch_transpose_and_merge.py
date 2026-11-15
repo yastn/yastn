@@ -1,3 +1,6 @@
+from itertools import groupby
+
+import numpy as np
 import torch
 import fused_transpose_merge_1d
 
@@ -119,7 +122,7 @@ class kernel_transpose_and_merge_p2p_v2(torch.autograd.Function):
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
         #
         jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
-            zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
+            zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]  # noqa: F841
         # for row in jobs:
         #     print(f"{row[0]} {len(row[4])}")
         source_inds, dest_inds= fused_transpose_merge_1d.map_source_to_dest_plain_omp_v2(order,meta_new,meta_mrg)

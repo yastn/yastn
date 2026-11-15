@@ -188,7 +188,7 @@ API
 ---
 
 .. autoclass:: yastn.tn.fpeps.EnvCTM
-    :members: to_dict, from_dict, reset_, bond_metric, update_, update_bond_, iterate_, ctmrg_, measure_1site, measure_nn, 
+    :members: to_dict, from_dict, to_nonsymmetric, reset_, bond_metric, update_, update_bond_, iterate_, ctmrg_, measure_1site, measure_nn, 
               sample, measure_2x2, measure_line, measure_nsite, measure_nsite_exact, measure_2site, transfer_matrix_spectrum
 
 .. autoclass:: yastn.tn.fpeps.envs.EnvCTM_local

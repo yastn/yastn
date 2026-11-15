@@ -111,6 +111,7 @@ It is also possible to make a shallow copy with :code:`psi.shallow_copy()`, wher
 .. automethod:: yastn.tn.mps.MpsMpoOBC.shallow_copy
 .. automethod:: yastn.tn.mps.MpsMpoOBC.copy
 .. automethod:: yastn.tn.mps.MpsMpoOBC.clone
+.. automethod:: yastn.tn.mps.MpsMpoOBC.to_nonsymmetric
 
 
 Import and export MPS/MPO from/to different formats

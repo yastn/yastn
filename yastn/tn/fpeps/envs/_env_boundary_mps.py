@@ -13,14 +13,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ==============================================================================
+from __future__ import annotations
 from itertools import accumulate
 
-from tqdm import tqdm
 
 from ._env_contractions import identity_boundary
 from ._env_window import _measure_nsite, _measure_2site, _sample
 from .._gates_auxiliary import clear_operator_input
-from .._peps import PEPS_CLASSES, Peps2Layers
+from .._peps import PEPS_CLASSES
 from ... import mps
 from ....tensor import YastnError
 
@@ -78,7 +78,7 @@ class EnvBoundaryMPS():
 
         self.info = {}
 
-        if opts_var == None:
+        if opts_var is None:
             opts_var = {'max_sweeps': 2, 'normalize': False,}
 
         if 'r' in setup:
@@ -160,6 +160,42 @@ class EnvBoundaryMPS():
             env._env[k] = mps.MpsMpoOBC.from_dict(v, config)
         for k, v in d['info'].items():
             env.info[k] = v.copy()
+        return env
+
+    def to_nonsymmetric(self, native=False, key=None) -> EnvBoundaryMPS:
+        r"""
+        New environment with the state and all boundary MPSs converted by
+        :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Legs of all tensors are assumed to be consistent, i.e., connected legs carry the same charge sectors,
+        so that each tensor can be converted independently and the dense legs match.
+        The state is converted with :meth:`yastn.tn.fpeps.Peps.to_nonsymmetric`,
+        and boundary MPSs with :meth:`yastn.tn.mps.MpsMpoOBC.to_nonsymmetric`,
+        where their hard-fused physical legs (ket and bra legs fused together) are unfused, converted, and fused back.
+
+        Operators to be used with the converted environment should be converted with the same ``key``.
+        Where they do not carry all charge sectors of the physical leg, pass them in ``legs``
+        of :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Parameters
+        ----------
+        native: bool
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        key: Callable | str | None
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Raises
+        ------
+        YastnError
+            If the config is fermionic, as swap gates act trivially on non-symmetric tensors.
+        """
+        env = EnvBoundaryMPS(self.psi.to_nonsymmetric(native=native, key=key), opts_svd={}, setup='')
+        for k, v in self._env.items():
+            env._env[k] = v.to_nonsymmetric(native=native, key=key)
+        for k, v in self.info.items():
+            env.info[k] = v.copy()
+        env.offset = self.offset
         return env
 
     def boundary_mps(self, n, dirn):

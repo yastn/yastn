@@ -32,6 +32,8 @@ from ..sym import sym_none
 from .._split_combine_dict import combine_data_and_meta
 
 if TYPE_CHECKING:
+    import numpy
+    import torch
     from . import Tensor
 
 __all__ = ['requires_grad']
@@ -536,6 +538,53 @@ def to_nonsymmetric(a, legs=None, native=False, key=None) -> 'Tensor':
     c_struct = _struct(legs=c_legs, n=(), isdiag=a.isdiag)
     data = a.config.backend.merge_to_dense(a._data, Dtot_n, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None, trans=None)
+
+
+def _check_not_fermionic(config, name):
+    r"""
+    Raise :class:`yastn.YastnError` if ``config`` is fermionic.
+
+    Swap gates act trivially on non-symmetric tensors, so fermionic signs would be lost in
+    tensor network structures converted with ``to_nonsymmetric``.
+    """
+    f = config.fermionic
+    if any(f) if isinstance(f, tuple) else bool(f):
+        raise YastnError(f"{name}.to_nonsymmetric() is not supported for fermionic config; "
+                         "swap gates act trivially on non-symmetric tensors.")
+
+
+def _to_nonsymmetric_unfused(a, axes=(), legs=None, native=False, key=None) -> 'Tensor':
+    r"""
+    :meth:`yastn.Tensor.to_nonsymmetric` keeping the hard fusion of the legs listed in ``axes``.
+
+    Each hard-fused leg in ``axes`` is unfused (one level), the tensor is converted with
+    :meth:`yastn.Tensor.to_nonsymmetric`, and the resulting dense legs are fused back with ``mode='hard'``.
+    The dense fused leg then has the same structure as a hard fusion of separately converted
+    constituent legs. Legs in ``axes`` that are not hard-fused, and all other legs, are converted as they are;
+    axes beyond the rank of the tensor are ignored.
+
+    ``legs`` is passed to :meth:`yastn.Tensor.to_nonsymmetric`, with keys being axes of the original
+    tensor; it should not include the legs that get unfused.
+    """
+    fused = sorted({ax for ax in axes if ax < a.ndim and a.get_legs(axes=ax).is_fused()}, reverse=True)
+    if not fused:
+        return a.to_nonsymmetric(legs=legs, native=native, key=key)
+    if legs is not None and any(ax in fused for ax in legs):
+        raise YastnError("legs cannot be specified for the legs that are unfused.")
+    splits = {}  # original axis -> number of legs it is unfused into
+    for ax in fused:  # from the highest axis down, so lower indices stay valid
+        ndim = a.ndim
+        a = a.unfuse_legs(axes=ax)
+        splits[ax] = a.ndim - ndim + 1
+    if legs is not None:  # shift the axes by the extra legs created by unfusing at lower axes
+        legs = {ax + sum(n - 1 for f, n in splits.items() if f < ax): leg for ax, leg in legs.items()}
+    a = a.to_nonsymmetric(legs=legs, native=native, key=key)
+    groups, ax_new = [], 0
+    for ax in range(a.ndim - sum(n - 1 for n in splits.values())):
+        n = splits.get(ax, 1)
+        groups.append(tuple(range(ax_new, ax_new + n)) if n > 1 else ax_new)
+        ax_new += n
+    return a.fuse_legs(axes=tuple(groups), mode='hard')
 
 
 def zero_of_dtype(a):

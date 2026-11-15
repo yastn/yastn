@@ -289,19 +289,19 @@ def test_initialize_exceptions(config_kwargs):
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     with pytest.raises(yastn.YastnError):
-        a = yastn.ones(config=config_dense, s=(1, 1), D=[(1,), (1,), (1,)])
+        yastn.ones(config=config_dense, s=(1, 1), D=[(1,), (1,), (1,)])
         # Number of elements in D does not match tensor rank.
     with pytest.raises(yastn.YastnError):
-        a = yastn.ones(config=config_U1, s=(1, 1), t=[(0,), (0,)], D=[(1,), (1,), (1,)])
+        yastn.ones(config=config_U1, s=(1, 1), t=[(0,), (0,)], D=[(1,), (1,), (1,)])
         # Number of elements in D does not match tensor rank
     with pytest.raises(yastn.YastnError):
-        a = yastn.ones(config=config_U1, s=(1, 1), t=[(0,), (0,), (0,)], D=[(1,), (1,)])
+        yastn.ones(config=config_U1, s=(1, 1), t=[(0,), (0,), (0,)], D=[(1,), (1,)])
         # Number of elements in t does not match tensor rank.
     with pytest.raises(yastn.YastnError):
-        a = yastn.ones(config=config_U1, s=(1, 1), t=[(0,), (0,)], D=[(1, 2), (1,)])
+        yastn.ones(config=config_U1, s=(1, 1), t=[(0,), (0,)], D=[(1, 2), (1,)])
         # Elements of t and D do not match
     with pytest.raises(yastn.YastnError):
-        a = yastn.eye(config=config_U1, t=[(0,), (0,)], D=[(1,), (2,)])
+        yastn.eye(config=config_U1, t=[(0,), (0,)], D=[(1,), (2,)])
         # Diagonal tensor requires the same bond dimensions on both legs.
     with pytest.raises(yastn.YastnError):
         _ = yastn.Tensor(config=config_U1, n=(0, 0))
