@@ -463,7 +463,6 @@ def _send_payload(t):
     event before reading.  No host-side ``cuda.synchronize`` is
     required.
     """
-    import torch
     t = t.detach().resolve_conj()
     if t.is_cuda:
         return t.contiguous()

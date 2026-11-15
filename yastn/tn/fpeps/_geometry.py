@@ -127,7 +127,7 @@ class SquareLattice():
 
     def __eq__(self, other):
         return isinstance(other, SquareLattice) and \
-               type(self) == type(other) and \
+               type(self) is type(other) and \
                self._periodic == other._periodic and \
                self._dims == other._dims and \
                self._sites == other._sites and \

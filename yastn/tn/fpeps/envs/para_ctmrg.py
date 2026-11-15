@@ -1,3 +1,18 @@
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# ==============================================================================
 import logging
 import numpy as np
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
@@ -221,16 +236,16 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
 
     if type(env_psi) is Peps:
         psi = env_psi
-        ket = None
+        bra = None
         env = None
     elif type(env_psi) is EnvCTM:
         env = env_psi
         if type(env.psi) is Peps:
             psi = env_psi.psi
-            ket = None
+            bra = None
         else:
-            psi = env_psi.psi.bra
-            ket = env_psi.psi._ket
+            psi = env_psi.psi.ket
+            bra = env_psi.psi._bra
 
 
     while psi.nn_site(site, (0, -left)) is None:
@@ -254,10 +269,10 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
     net_part = SquareLattice((Lx, Ly), 'obc')
     psi_part = Peps(net_part, psi[site])
 
-    if ket is not None:
-        ket_part = Peps(net_part, ket[site])
+    if bra is not None:
+        bra_part = Peps(net_part, bra[site])
     else:
-        ket_part = None
+        bra_part = None
 
 
     site0 = Site(nx0, ny0)
@@ -274,17 +289,17 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
                 d = (dx, dy)
                 if psi.nn_site(site, d) is not None:
                     psi_part[psi_part.nn_site(site0, d)] = psi[psi.nn_site(site, d)]
-                    if ket_part is not None:
-                        ket_part[psi_part.nn_site(site0, d)] = ket[psi.nn_site(site, d)]
+                    if bra_part is not None:
+                        bra_part[psi_part.nn_site(site0, d)] = bra[psi.nn_site(site, d)]
     else:
         for d in site_load:
             if psi.nn_site(site, d) is not None:
                 psi_part[psi_part.nn_site(site0, d)] = psi[psi.nn_site(site, d)]
-                if ket_part is not None:
-                    ket_part[psi_part.nn_site(site0, d)] = ket[psi.nn_site(site, d)]
+                if bra_part is not None:
+                    bra_part[psi_part.nn_site(site0, d)] = bra[psi.nn_site(site, d)]
 
     if type(env_psi) is EnvCTM:
-        env_part = EnvCTM(psi_part, init='eye', ket=ket_part)
+        env_part = EnvCTM(psi_part, init='eye', bra=bra_part)
         if env_load_dict is None:
             for dx in range(-top, bottom + 1):
                 for dy in range(-left, right + 1):
@@ -487,7 +502,6 @@ def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0):
     if not ray.is_initialized():
         ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
 
-    psi = env.psi
     env_remote = ray.put(env)
     list_of_dicts = ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(site, env_remote, op) for site in env.psi.sites()])
 

@@ -37,7 +37,7 @@ import json
 import math
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import torch
 
@@ -386,7 +386,7 @@ def report(rows: list[Row], args):
             print(f"{L:7d} {sel[0].series:>7} {cells}   {best}")
 
     print("\n" + "=" * 96)
-    print(f"crossover  gesvdj -> gesvd   (below: gesvdj faster, above: gesvd faster)")
+    print("crossover  gesvdj -> gesvd   (below: gesvdj faster, above: gesvd faster)")
     print("=" * 96)
     out = []
     for spec in args.spectra:

@@ -17,14 +17,14 @@
 from typing import Sequence, Union
 import numpy as np
 import torch
-import tapp_torch
+import tapp_torch  # noqa: F401 -- required extension; fail early if missing
 from .._profile import nsys_profile
-from .backend_torch import *
+from .backend_torch import *  # noqa: F401 -- re-export the torch backend API
 
 
 BACKEND_ID = "torch_cutensor"
 
-from tapp_torch.ops import descriptor_cache_stats, plan_cache_stats
+from tapp_torch.ops import descriptor_cache_stats, plan_cache_stats  # noqa: F401 -- exposed as backend attributes
 
 
 def tensordot_bs(Adata, Bdata, *args):

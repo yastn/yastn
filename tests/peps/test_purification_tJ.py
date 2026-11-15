@@ -17,7 +17,6 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
-import logging
 
 def exact_diagonalization_tJ(config_kwargs, Nx, Ny, t, J, mu, beta, sym="U1xU1xZ2"):
     net = fpeps.SquareLattice((Nx, Ny), "obc")

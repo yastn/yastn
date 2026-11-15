@@ -36,8 +36,8 @@ def test_krylov(config_kwargs):
     termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(N)]
     HZ = mps.generate_mpo(I, termsZ)
     #
-    H = HXX + HZ
-    psi = mps.random_mps(I, D_total=4)
+    H = HXX + HZ  # noqa: F841 -- unfinished test; see the commented-out check below
+    psi = mps.random_mps(I, D_total=4)  # noqa: F841
 
     # yastn.expmv(lambda x: H @ x, psi, 0.1)
 

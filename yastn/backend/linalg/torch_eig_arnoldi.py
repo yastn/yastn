@@ -1,6 +1,6 @@
-import torch
-import scipy.sparse.linalg
-from scipy.sparse.linalg import LinearOperator
+import torch  # noqa: F401 -- used by the commented-out implementation below
+import scipy.sparse.linalg  # noqa: F401 -- used by the commented-out implementation below
+from scipy.sparse.linalg import LinearOperator  # noqa: F401 -- used by the commented-out implementation below
 
 
 # class SYMARNOLDI(torch.autograd.Function):

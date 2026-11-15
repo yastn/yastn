@@ -29,7 +29,7 @@ from ... import mps
 from ....initialize import rand, ones, eye
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
-from ...._profile import nvtx_range, nsys_profile
+from ...._profile import nvtx_range
 
 logger = logging.getLogger(__name__)
 
@@ -1118,7 +1118,7 @@ class EnvCTM():
         Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
         The corners are indexed by pair of Site and corner identifier.
         """
-        _get_spec = lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
+        _get_spec = lambda x: x.svd(compute_uv=False) if x is not None and not x.isdiag else x
         corner_sv = {}
         for site in env.sites():
             for dirn in env[site].fields(among=['tl', 'tr', 'bl', 'br']):
@@ -1258,7 +1258,7 @@ def norm_diff(old: Lattice[dict[Site,EnvCTM_local]], new: Lattice[dict[Site,EnvC
             if ten_x is not None and ten_y is not None:
                 try:
                     diff= abs(ten_x.detach()) - abs(ten_y.detach())
-                except YastnError as e: # fail to take difference, e.g., because of different leg structure
+                except YastnError: # fail to take difference, e.g., because of different leg structure
                     diff= None
                 setattr(diffs[site], dirn, diff.norm(p=p) if diff is not None else None)
     return diffs

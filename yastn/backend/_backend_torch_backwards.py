@@ -119,9 +119,6 @@ class kernel_svds_scipy(torch.autograd.Function):
     @staticmethod
     def backward(ctx, Udata_b, Sdata_b, Vhdata_b):
         raise Exception("backward not implemented")
-        Udata, Sdata, Vhdata = ctx.saved_tensors
-        data_b= torch.zeros((data_size,), dtype=Udata.dtype, device=Udata.device)
-        return None,None,None,None,None,None
 
 
 class kernel_dot(torch.autograd.Function):

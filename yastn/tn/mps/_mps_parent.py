@@ -307,7 +307,7 @@ class _MpsMpoParent:
         psi = self.shallow_copy()
         try:
             factor = psi.config.backend.to_numpy(psi.factor)
-        except:
+        except Exception:
             factor = psi.factor
         psi.absorb_central_()  # make sure central block is eliminated
         file.create_dataset(my_address+'/N', data=psi.N)

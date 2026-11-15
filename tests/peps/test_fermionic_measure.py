@@ -74,17 +74,21 @@ def generate_mps(ops, occs_init, angles, s2i):
     return phi
 
 
-def measure_combinations(*operators, env=None, fun=None, **kwargs):
+def measure_combinations(*operators, env=None, fun=None, unordered=False, **kwargs):
     """
-    Test all possible combination of sites; skip those where measure_line cannot be applied
+    Test all possible combination of sites; skip those where measure_line cannot be applied.
+    With ``unordered=True``, only sites in sorted order are measured (for bosonic operators,
+    where the listing order cannot change the value).
     """
     res = {}
     lo = len(operators)
     f = getattr(env, fun)
     for sites in product(*([env.sites()] * lo)):
+        if unordered and list(sites) != sorted(sites):
+            continue
         try:
             res[sites] = f(*operators, sites=sites, **kwargs)
-        except:
+        except Exception:
             pass
     return res
 
@@ -209,12 +213,13 @@ def test_measure(config_kwargs, sym, L):
     nn_peps['2s'] = env_ctm.measure_2site(ops.n(), ops.n(), xrange=[0, L], yrange=[0, L], opts_svd=opts_svd)
     nn_peps['2x2'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_2x2')
     nn_peps['line'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_line')
-    nn_peps['nsite'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite')
-    nn_peps['nsite_exact'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact')
-    nn_peps['nsite_exact_oe'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact_oe', optimizer="random-greedy")
+    # n is bosonic: the expensive n-site methods are checked on unordered pairs only
+    nn_peps['nsite'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite', unordered=True)
+    nn_peps['nsite_exact'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact', unordered=True)
+    nn_peps['nsite_exact_oe'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact_oe', unordered=True, optimizer="greedy")
     # nn_peps['nsite_mps'] = measure_combinations(ops.n(), ops.n(), env=env_bd, fun='measure_nsite')
     assert(len(nn_peps['line'])) == 2 * L ** 3 - L ** 2
-    assert(len(nn_peps['nsite'])) == L ** 4
+    assert(len(nn_peps['nsite'])) == L ** 2 * (L ** 2 + 1) // 2
 
     for method, res in nn_peps.items():
         print('Density-density', method)
@@ -234,7 +239,7 @@ def test_measure(config_kwargs, sym, L):
     cpc_peps['line'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_line')
     cpc_peps['nsite'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite')
     cpc_peps['nsite_exact'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite_exact')
-    cpc_peps['nsite_exact_oe'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite_exact_oe', optimizer="random-greedy")
+    cpc_peps['nsite_exact_oe'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite_exact_oe', optimizer="greedy")
     cpc_peps['nsite_mps'] = measure_combinations(ops.cp(), ops.c(), env=env_bd, fun='measure_nsite')
     assert(len(cpc_peps['line'])) == 2 * L ** 3 - L ** 2
     assert(len(cpc_peps['nsite'])) == L ** 4

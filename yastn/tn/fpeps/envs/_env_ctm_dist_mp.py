@@ -15,7 +15,10 @@
 # ==============================================================================
 from __future__ import annotations
 import logging
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING, Sequence
+
+if TYPE_CHECKING:
+    import multiprocessing as mp
 
 from ._env_contractions import halves_4x4_lhr, halves_4x4_tvb, update_env_fetch_args, update_env_dir
 from ._env_ctm import CTMRG_out, EnvCTM, proj_corners
@@ -135,7 +138,7 @@ def _ctmrg_iterator_D_(env, opts: CTMOpts):
     try:
         logger.info(f"ctmrg_T main loop max_workers={max_workers} on devices={devices}")
         for sweep in range(1, opts.max_sweeps + 1):
-            if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_")
+            if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push("update_")
             update_D_(ctmrg_mp_context, env, opts=opts)
             if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
@@ -296,7 +299,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts: CTMOpts):
         device_groups= _partition_devices(len(sites_proj))
         logger.info(f"_update_core_T_ {move} {device_groups} ")
 
-        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
+        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push("update_projectors_")
 
         # Stage 1: compute enlarged corners and halfs
         for i,site in enumerate(sites_proj):
@@ -369,7 +372,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts: CTMOpts):
 
         #
         # Update move
-        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_env_D_")
+        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push("update_env_D_")
 
         # NOTE Here, we assumme that master process has up-to-date view of all on-site tensors, projectors, and env tensors
         #
@@ -540,7 +543,7 @@ def projectors_stage1(out_queue, device,
     del ts_d
     _config= ts[0].config
 
-    if profiling_mode in ["NVTX",]: _config.backend.cuda.nvtx.range_push(f"projectors_stage1")
+    if profiling_mode in ["NVTX",]: _config.backend.cuda.nvtx.range_push("projectors_stage1")
     cor_tt, cor_bb, cor_ll, cor_rr= None, None, None, None
     res= ()
     if any(x in move for x in 'lrh'):

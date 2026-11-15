@@ -15,6 +15,11 @@
 # ==============================================================================
 """ yastn.split_data_and_meta() and yastn.combine_data_and_meta() """
 from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy
+    import torch
 
 __all__ = ['split_data_and_meta', 'combine_data_and_meta']
 

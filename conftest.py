@@ -4,7 +4,7 @@ import pytest
 def pytest_addoption(parser):
     parser.addoption("--backend", help='backend', default='np', choices=['np','torch','torch_cutensor'], action='store')
     parser.addoption("--device", help='cpu or cuda', default='cpu', action='store')
-    parser.addoption("--tensordot_policy", choices=['fuse_to_matrix', 'fuse_contracted', 'no_fusion'], default='fuse_to_matrix', action='store')
+    parser.addoption("--tensordot_policy", choices=['fuse_to_matrix', 'fuse_contracted', 'no_fusion'], default='fuse_contracted', action='store')
     parser.addoption("--lazy_threshold", type=float, default=0.5, action='store')
     parser.addoption("--default_fusion", choices=['hard', 'meta'], default='hard', action='store')
     parser.addoption("--quickstart", help='execute quickstarts', action='store_true', dest="quickstart", default=False)

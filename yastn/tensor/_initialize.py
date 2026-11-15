@@ -14,7 +14,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
-import os
 import warnings
 import numbers
 from functools import reduce

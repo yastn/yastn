@@ -32,6 +32,8 @@ from ..sym import sym_none
 from .._split_combine_dict import combine_data_and_meta
 
 if TYPE_CHECKING:
+    import numpy
+    import torch
     from . import Tensor
 
 __all__ = ['requires_grad']

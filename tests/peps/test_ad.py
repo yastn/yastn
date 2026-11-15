@@ -170,8 +170,8 @@ def prepare_RVB(additional_imports):
             opts_svd = {"D_total": 64, 'fix_signs': fix_signs, 'tol': 1e-8, 'eps_multiplet': 1e-8}
 
         env = fpeps.EnvCTM(psi, init=ctm_init)
-        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
-                          use_qr=False, checkpoint_move=checkpoint_move)
+        env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
+                   use_qr=False, checkpoint_move=checkpoint_move)
         r1x1, r1x1_norm= rdm1x1( (0,0), psi, env)
         return r1x1[(-1,-1)].trace().real
 
