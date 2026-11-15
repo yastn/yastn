@@ -21,6 +21,7 @@ from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_ga
 from ._geometry import Lattice
 from ...initialize import block
 from ...tensor import Tensor, YastnError
+from ...tensor._output import _check_not_fermionic, _to_nonsymmetric_unfused
 from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 
 
@@ -98,6 +99,45 @@ class Peps(Lattice):
         """ Whether PEPS has physical leg"""
         site0 = self.sites()[0]
         return self[site0].ndim == 5
+
+    def to_nonsymmetric(self, native=False, key=None) -> Peps:
+        r"""
+        New PEPS with all tensors converted by :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Legs of all tensors are assumed to be consistent, i.e., connected legs carry the same charge sectors,
+        so that each tensor can be converted independently and the dense legs match.
+        A hard-fused physical leg (e.g., system and ancilla in a purification) is unfused, converted,
+        and fused back, so that its fusion structure is kept in the non-symmetric tensors.
+
+        .. note::
+            Virtual legs are assumed not to be fused; this is not checked.
+            A hard-fused virtual leg would be converted into a plain dense leg.
+
+        Operators to be used with the converted PEPS should be converted with the same ``key``.
+        Where they do not carry all charge sectors of the physical leg, pass them in ``legs``
+        of :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Parameters
+        ----------
+        native: bool
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        key: Callable | str | None
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Raises
+        ------
+        YastnError
+            If the config is fermionic, as swap gates act trivially on non-symmetric tensors.
+        """
+        _check_not_fermionic(self.config, type(self).__name__)
+        net = type(self)(geometry=self.geometry)
+        for ind, ten in self._site_data.items():
+            if isinstance(ten, Tensor):  # physical leg, if present, is the last one
+                net._site_data[ind] = _to_nonsymmetric_unfused(ten, axes=(4,), native=native, key=key)
+            elif ten is not None:
+                net._site_data[ind] = ten.to_nonsymmetric(native=native, key=key)
+        return net
 
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._site_data })"
@@ -306,6 +346,13 @@ class Peps2Layers():
     def to(self, device: str=None, dtype: str=None, **kwargs) -> Peps2Layers:
         return Peps2Layers(ket=self.ket.to(device=device, dtype=dtype, **kwargs),
                            bra=self.bra.to(device=device, dtype=dtype, **kwargs) if not self.bra_is_ket else None)
+
+    def to_nonsymmetric(self, native=False, key=None) -> Peps2Layers:
+        r"""
+        New Peps2Layers with ket and bra converted by :meth:`yastn.tn.fpeps.Peps.to_nonsymmetric`.
+        """
+        return Peps2Layers(ket=self.ket.to_nonsymmetric(native=native, key=key),
+                           bra=self._bra.to_nonsymmetric(native=native, key=key) if not self.bra_is_ket else None)
 
     def to_dict(self, level=2, resolve_ops=False) -> dict:
         r"""

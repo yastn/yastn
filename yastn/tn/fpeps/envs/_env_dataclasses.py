@@ -16,6 +16,7 @@
 from dataclasses import dataclass, fields
 
 from ....tensor import Tensor, YastnError
+from ....tensor._output import _to_nonsymmetric_unfused
 
 __all__ = ["EnvBP_local", "EnvCTM_local", "EnvCTM_projectors", "EnvCTM_c4v_local", "EnvCTM_c4v_projectors", "Gauge"]
 
@@ -26,6 +27,16 @@ class dataclasses_common():
     def to(self, device: str=None, dtype: str=None, **kwargs):
         return type(self)(**{k.name: getattr(self, k.name).to(device=device, dtype=dtype, **kwargs) for k in fields(self)
                              if getattr(self, k.name) is not None})
+
+    def to_nonsymmetric(self, native=False, key=None):
+        r"""
+        New instance with all tensors converted by :meth:`yastn.Tensor.to_nonsymmetric`.
+        Hard-fused legs (e.g., ket and bra legs fused in environment tensors) are unfused,
+        converted, and fused back, keeping their fusion structure.
+        """
+        return type(self)(**{k.name: _to_nonsymmetric_unfused(getattr(self, k.name), axes=range(getattr(self, k.name).ndim),
+                                                               native=native, key=key)
+                             for k in fields(self) if getattr(self, k.name) is not None})
 
     def copy(self):
         return type(self)(**{k.name: getattr(self, k.name).copy() for k in fields(self)

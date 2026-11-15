@@ -27,9 +27,15 @@ from .._geometry import Site, Lattice, is_site
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon
+from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon, legs_union
+from ....tensor._output import _to_nonsymmetric_unfused
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 from ...._profile import nvtx_range
+
+# fields of EnvCTM_local, and connections of their virtual legs (field, axis, field, axis) around a site
+_CTM_FIELDS = ('tl', 't', 'tr', 'r', 'br', 'b', 'bl', 'l')
+_CTM_RING = (('tl', 1, 't', 0), ('t', 2, 'tr', 0), ('tr', 1, 'r', 0), ('r', 2, 'br', 0),
+             ('br', 1, 'b', 0), ('b', 2, 'bl', 0), ('bl', 1, 'l', 0), ('l', 2, 'tl', 0))
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +232,116 @@ class EnvCTM():
         env.si_Y = self.si_Y.to(device=device, dtype=dtype, **kwargs)
         env._si_age = self._si_age.copy()
         return env
+
+    def to_nonsymmetric(self, native=False, key=None) -> EnvCTM:
+        r"""
+        New environment with the state and all environment tensors converted by
+        :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        The state is converted with :meth:`yastn.tn.fpeps.Peps.to_nonsymmetric`, where legs are assumed to be consistent.
+        Connected legs of environment tensors (corners and edges) can carry different charge sectors,
+        e.g., after truncation in CTMRG; each such leg is filled with zero blocks to the union of
+        charge sectors over all legs it is connected to, so that the dense legs match.
+        In environment tensors and projectors, hard-fused legs (ket and bra legs fused together)
+        are unfused, converted, and fused back, so that they match the converted state.
+
+        .. note::
+            Projectors (and subspace-iteration data) are converted tensor by tensor, without filling in
+            missing charge sectors. For environments with fields other than ``tl``, ``t``, ``tr``, ``r``,
+            ``br``, ``b``, ``bl``, ``l`` (e.g., :class:`yastn.tn.fpeps.EnvCTM_c4v`),
+            environment tensors are also converted tensor by tensor.
+
+        Operators to be used with the converted environment should be converted with the same ``key``.
+        Where they do not carry all charge sectors of the physical leg, pass them in ``legs``
+        of :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Parameters
+        ----------
+        native: bool
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        key: Callable | str | None
+            Passed to :meth:`yastn.Tensor.to_nonsymmetric`.
+
+        Raises
+        ------
+        YastnError
+            If the config is fermionic, as swap gates act trivially on non-symmetric tensors.
+        """
+        env = type(self)(self.psi.to_nonsymmetric(native=native, key=key), init=None)
+        if all(isinstance(self.env[site], EnvCTM_local) for site in self.sites()):
+            legs = self._env_legs_union()
+            objects = {}
+            for site in self.sites():
+                ind, loc = self.site2index(site), self.env[site]
+                fields = {}
+                for name in _CTM_FIELDS:
+                    ten = getattr(loc, name)
+                    if ten is not None:
+                        ten_legs = {ax: legs[ind, name, ax] for ax in range(ten.ndim) if (ind, name, ax) in legs}
+                        fields[name] = _to_nonsymmetric_unfused(ten, axes=range(ten.ndim), legs=ten_legs,
+                                                                native=native, key=key)
+                objects[site] = EnvCTM_local(**fields)
+            env.env = Lattice(self.geometry, objects=objects)
+        else:
+            env.env = self.env.to_nonsymmetric(native=native, key=key)
+        env.proj = self.proj.to_nonsymmetric(native=native, key=key)
+        env.si_X = self.si_X.to_nonsymmetric(native=native, key=key)
+        env.si_Y = self.si_Y.to_nonsymmetric(native=native, key=key)
+        env._si_age = self._si_age.copy()
+        return env
+
+    def _env_legs_union(self) -> dict:
+        r"""
+        Union of charge sectors over connected virtual legs of corner and edge tensors.
+
+        Returns a dict mapping ``(site2index(site), field, axis)`` to the Leg (with the signature of that leg)
+        carrying all charge sectors appearing in any leg connected to it.
+        """
+        parent = {}  # union-find over nodes (site2index(site), field, axis)
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def tensor(node):
+            loc = self.env._site_data[node[0]]
+            return None if loc is None else getattr(loc, node[1])
+
+        def link(site0, f0, a0, site1, f1, a1):
+            x = (self.site2index(site0), f0, a0)
+            y = (self.site2index(site1), f1, a1)
+            if tensor(x) is not None and tensor(y) is not None:
+                parent.setdefault(x, x)
+                parent.setdefault(y, y)
+                parent[find(x)] = find(y)
+
+        for site in self.sites():
+            # the ring of corners and edges around a site
+            for f0, a0, f1, a1 in _CTM_RING:
+                link(site, f0, a0, site, f1, a1)
+            # edges continue across neighboring sites
+            sr, sb = self.nn_site(site, 'r'), self.nn_site(site, 'b')
+            if sr is not None:
+                link(site, 't', 2, sr, 't', 0)
+                link(sr, 'b', 2, site, 'b', 0)
+            if sb is not None:
+                link(site, 'l', 0, sb, 'l', 2)
+                link(site, 'r', 2, sb, 'r', 0)
+
+        groups = {}
+        for node in parent:
+            groups.setdefault(find(node), []).append(node)
+        legs = {}
+        for nodes in groups.values():
+            node_legs = [tensor(node).get_legs(axes=node[2]) for node in nodes]
+            s0 = node_legs[0].s
+            union = legs_union(*(leg if leg.s == s0 else leg.conj() for leg in node_legs))
+            for node, leg in zip(nodes, node_legs):
+                legs[node] = union if leg.s == union.s else union.conj()
+        return legs
 
     def clone(self) -> EnvCTM:
         r"""
