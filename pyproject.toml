@@ -53,3 +53,7 @@ disable = [
     "no-self-argument",                 # sym_* classes are used as namespaces of class-level functions
     "possibly-used-before-assignment",  # branch-dependent assignments guarded by options
 ]
+
+[tool.pylint.typecheck]
+# torch.linalg functions are built via torch._C._add_docstr; astroid flags them as not-callable (E1102)
+ignored-modules = ["torch.linalg"]
