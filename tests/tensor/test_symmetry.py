@@ -24,6 +24,8 @@ import yastn.sym.sym_none as sym_none
 import yastn.sym.sym_U1xU1 as sym_U1xU1
 import yastn.sym.sym_Z2xU1 as sym_Z2xU1
 import yastn.sym.sym_U1xU1xZ2 as sym_U1xU1xZ2
+import yastn.sym.sym_U1xU1xU1 as sym_U1xU1xU1
+import yastn.sym.sym_U1xU1xU1xZ2 as sym_U1xU1xU1xZ2
 
 
 def test_symmetry():
@@ -39,7 +41,10 @@ def test_symmetry():
                [[], [], []]]
     charges = np.array(charges, dtype=np.int64)
     fused_charges = sym_none.fuse(charges, signatures=(1, 1, -1), new_signature=1)
-    ref_charges = np.array([[], [], [], []], dtype=np.int64)
+    ref_charges = np.array([[],
+                            [],
+                            [],
+                            []], dtype=np.int64)
     assert 'int' in fused_charges.dtype.name
     assert np.allclose(fused_charges, ref_charges)
     #
@@ -53,7 +58,10 @@ def test_symmetry():
                [[-1], [0], [3]]]
     charges = np.array(charges, dtype=np.int64)
     fused_charges = sym_U1.fuse(charges, signatures=(1, 1, -1), new_signature=-1)
-    ref_charges = np.array([[1], [-2], [1], [4]], dtype=np.int64)
+    ref_charges = np.array([[1],
+                            [-2],
+                            [1],
+                            [4]], dtype=np.int64)
     assert 'int' in fused_charges.dtype.name
     assert np.allclose(fused_charges, ref_charges)
     #
@@ -67,7 +75,10 @@ def test_symmetry():
                [[1], [0], [0]]]
     charges = np.array(charges, dtype=np.int64)
     fused_charges = sym_Z2.fuse(charges, signatures=(1, 1, -1), new_signature=1)
-    ref_charges = np.array([[0], [1], [0], [1]], dtype=np.int64)
+    ref_charges = np.array([[0],
+                            [1],
+                            [0],
+                            [1]], dtype=np.int64)
     assert 'int' in fused_charges.dtype.name
     assert np.allclose(fused_charges, ref_charges)
     #
@@ -81,7 +92,10 @@ def test_symmetry():
                [[1], [2], [1]]]
     charges = np.array(charges, dtype=np.int64)
     fused_charges = sym_Z3.fuse(charges, signatures=(1, 1, -1), new_signature=1)
-    ref_charges = np.array([[0], [0], [2], [2]], dtype=np.int64)
+    ref_charges = np.array([[0],
+                            [0],
+                            [2],
+                            [2]], dtype=np.int64)
     assert 'int' in fused_charges.dtype.name
     assert np.allclose(fused_charges, ref_charges)
     #
@@ -95,7 +109,10 @@ def test_symmetry():
                [[-1, 2], [0, 3], [3, 2]]]
     charges = np.array(charges, dtype=np.int64)
     fused_charges = sym_U1xU1.fuse(charges, signatures=(1, 1, -1), new_signature=-1)
-    ref_charges = np.array([[1, -3], [-2, 0], [1, -5], [4, -3]], dtype=np.int64)
+    ref_charges = np.array([[1, -3],
+                            [-2, 0],
+                            [1, -5],
+                            [4, -3]], dtype=np.int64)
     assert 'int' in fused_charges.dtype.name
     assert np.allclose(fused_charges, ref_charges)
     #
@@ -109,10 +126,49 @@ def test_symmetry():
                [[-1, 2, 1], [0, 3, 1], [3, 2, 1]]]
     charges = np.array(charges, dtype=np.int64)
     fused_charges = sym_U1xU1xZ2.fuse(charges, signatures=(1, 1, -1), new_signature=-1)
-    ref_charges = np.array([[1, -3, 0], [-2, 0, 0], [1, -5, 0], [4, -3, 1]], dtype=np.int64)
+    ref_charges = np.array([[1, -3, 0],
+                            [-2, 0, 0],
+                            [1, -5, 0],
+                            [4, -3, 1]], dtype=np.int64)
     assert 'int' in fused_charges.dtype.name
     assert np.allclose(fused_charges, ref_charges)
     #
+    # U1xU1xU1
+    assert sym_U1xU1xU1.NSYM == 3
+    assert str(sym_U1xU1xU1) == 'U1xU1xU1'
+    assert sym_U1xU1xU1.zero() == (0, 0, 0)
+    charges = [[[1, 0, 2], [-1, 1, 0], [1, -2, 1]],
+               [[1, 2, 0], [0, -2, 1], [-1, 0, 3]],
+               [[-2, 2, 1], [2, 1, -1], [1, -2, 0]],
+               [[-1, 2, 0], [0, 3, -2], [3, 2, 1]]]
+    charges = np.array(charges, dtype=np.int64)
+    fused_charges = sym_U1xU1xU1.fuse(charges, signatures=(1, 1, -1), new_signature=-1)
+    ref_charges = np.array([[1, -3, -1],
+                            [-2, 0, 2],
+                            [1, -5, 0],
+                            [4, -3, 3]], dtype=np.int64)
+    assert 'int' in fused_charges.dtype.name
+    assert np.allclose(fused_charges, ref_charges)
+    #
+    # U1xU1xU1xZ2
+    assert sym_U1xU1xU1xZ2.NSYM == 4
+    assert str(sym_U1xU1xU1xZ2) == 'U1xU1xU1xZ2'
+    assert sym_U1xU1xU1xZ2.zero() == (0, 0, 0, 0)
+    # Z2 carries the total parity of the three U1 charges.
+    charges = [[[1, 0, 2, 1], [-1, 1, 0, 0], [1, -2, 1, 0]],
+               [[1, 2, 0, 1], [0, -2, 1, 1], [-1, 0, 3, 0]],
+               [[-2, 2, 1, 1], [2, 1, -1, 0], [1, -2, 0, 1]],
+               [[-1, 2, 0, 1], [0, 3, -2, 1], [3, 2, 1, 0]]]
+    charges = np.array(charges, dtype=np.int64)
+    assert np.all(charges[:, :, 3] == np.sum(charges[:, :, :3], axis=2) % 2)
+    fused_charges = sym_U1xU1xU1xZ2.fuse(charges, signatures=(1, 1, -1), new_signature=-1)
+    ref_charges = np.array([[1, -3, -1, 1],
+                            [-2, 0, 2, 0],
+                            [1, -5, 0, 0],
+                            [4, -3, 3, 0]], dtype=np.int64)
+    assert 'int' in fused_charges.dtype.name
+    assert np.allclose(fused_charges, ref_charges)
+    assert np.all(fused_charges[:, 3] == np.sum(fused_charges[:, :3], axis=1) % 2)
     #
     # Z2xU1
     assert sym_Z2xU1.NSYM == 2
@@ -154,10 +210,24 @@ def test_add_charges():
     assert charge == (1, -1, 0)
     assert all(isinstance(x, int) for x in charge)
     #
+    assert sym_U1xU1xU1.add_charges((1, 0, 0), (0, 1, 0), signatures=[1, -1]) == (1, -1, 0)
+    assert sym_U1xU1xU1.add_charges((2, 1, -1), new_signature=-1) == (-2, -1, 1)
+    #
+    charge = sym_U1xU1xU1xZ2.add_charges((1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1))
+    assert charge == (1, 1, 1, 1)
+    assert all(isinstance(x, int) for x in charge)
+    assert sym_U1xU1xU1xZ2.add_charges((1, 0, 0, 1), new_signature=-1) == (-1, 0, 0, 1)
+    #
+    # no charges to add gives zero charge
+    assert sym_U1.add_charges() == (0,)
+    assert sym_U1xU1xU1xZ2.add_charges() == (0, 0, 0, 0)
+    #
     assert sym_U1.conj_charge((1,)) == (-1,)
     assert sym_Z2.conj_charge((1,)) == (1,)
     assert sym_Z3.conj_charge((1,)) == (2,)
     assert sym_U1xU1xZ2.conj_charge((-1, 2, 0)) == (1, -2, 0)
+    assert sym_U1xU1xU1.conj_charge((-1, 2, 0)) == (1, -2, 0)
+    assert sym_U1xU1xU1xZ2.conj_charge((-1, 2, 0, 1)) == (1, -2, 0, 1)
 
 
 if __name__ == '__main__':

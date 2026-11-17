@@ -1,3 +1,13 @@
+16-11-2026
+- new `yastn.operators.ColorfulFermions` with predefined operators for fermions with three color species
+  (`'r'`, `'g'`, `'b'`; 8-dimensional local space) in `Z2`, `U1`, `U1xU1xU1` (distinguishable species) and
+  `U1xU1xU1xZ2` (indistinguishable species) symmetries: `I`, `n`, `cp`, `c`, `vec_n`, `space`, `key`,
+  Gell-Mann operators `gell_mann(k)` and SU(3) generators `su3(k) = gell_mann(k) / 2`
+  (off-diagonal ones only for `Z2` and `U1`).
+- new symmetries `yastn.sym.sym_U1xU1xU1` and `yastn.sym.sym_U1xU1xU1xZ2`, available in `make_config`
+  as `sym='U1xU1xU1'` and `sym='U1xU1xU1xZ2'`.
+
+
 15-11-2026
 - new `to_nonsymmetric(native=False, key=None)` for `mps.MpsMpoOBC`/`MpoPBC`, `fpeps.Peps`, `fpeps.EnvCTM`
   and `fpeps.EnvBoundaryMPS`, converting all tensors with `Tensor.to_nonsymmetric`. Hard-fused physical legs

@@ -645,7 +645,7 @@ def diag(a) -> 'Tensor':
     #
     new_legs = a.struct.legs
     if a.trans == (1, 0):  # sufficient for the transpose, to have consistent signature flow
-        new_legs == new_legs[::-1]
+        new_legs = new_legs[::-1]
     #
     struct_new = a.struct._replace(isdiag=not a.isdiag)
     bl_new = get_blocks(a.config.sym, struct_new)

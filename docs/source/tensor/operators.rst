@@ -30,3 +30,10 @@ Spinful fermions
 
 .. autoclass:: yastn.operators.SpinfulFermions
     :members: I, n, cp, c, vec_n, space
+
+
+Colorful fermions
+-----------------
+
+.. autoclass:: yastn.operators.ColorfulFermions
+    :members: I, n, cp, c, gell_mann, su3, vec_n, space

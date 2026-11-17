@@ -66,7 +66,7 @@ class SpinfulFermions_tJ(meta_operators):
             return Leg(self.config, s=1, t=(0, 1), D=(1, 2))
         if self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
             return Leg(self.config, s=1, t=((0, 0, 0), (0, 1, 1), (1, 0, 1)), D=(1, 1, 1))
-        if self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+        else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
             return Leg(self.config, s=1, t=((0, 0), (0, 1), (1, 0)), D=(1, 1, 1))
 
     def key(self) -> None:
@@ -78,7 +78,7 @@ class SpinfulFermions_tJ(meta_operators):
         """
         if self._sym in ('Z2', 'U1'):
             return lambda t: (t[0] % 2, t[0])
-        if self._sym in ('U1xU1', 'U1xU1xZ2'):
+        else:  # self._sym in ('U1xU1', 'U1xU1xZ2')
             return lambda t: ((t[0] + t[1]) % 2, t[1], t[0])
 
     def vec_n(self, val=(0, 0)) -> Tensor:
@@ -106,7 +106,7 @@ class SpinfulFermions_tJ(meta_operators):
             elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
                 vec = Tensor(config=self.config, s=(1,), n=(1, 0, 1))
                 vec.set_block(ts=((1, 0, 1),), Ds=(1,), val=1)
-            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+            else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
                 vec = Tensor(config=self.config, s=(1,), n=(1, 0))
                 vec.set_block(ts=((1, 0),), Ds=(1,), val=1)
         elif val == (0, 1):
@@ -119,7 +119,7 @@ class SpinfulFermions_tJ(meta_operators):
             elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
                 vec = Tensor(config=self.config, s=(1,), n=(0, 1, 1))
                 vec.set_block(ts=((0, 1, 1),), Ds=(1,), val=1)
-            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+            else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
                 vec = Tensor(config=self.config, s=(1,), n=(0, 1))
                 vec.set_block(ts=((0, 1),), Ds=(1,), val=1)
         else:
@@ -138,7 +138,7 @@ class SpinfulFermions_tJ(meta_operators):
         elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
             for t in [(0, 0, 0), (0, 1, 1), (1, 0, 1)]:
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
-        elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+        else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
             for t in [(0, 0), (0, 1), (1, 0)]:
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
         return I
@@ -153,7 +153,7 @@ class SpinfulFermions_tJ(meta_operators):
                 n.set_block(ts=(1, 1), Ds=(2, 2), val=[[1, 0], [0, 0]])
             elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
                 n.set_block(ts=((1, 0, 1), (1, 0, 1)), Ds=(1, 1), val=1)
-            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+            else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
                 n.set_block(ts=((1, 0), (1, 0)), Ds=(1, 1), val=1)
         elif spin == 'd':
             if self._sym == 'Z2':  # charges: 0 = |00>; 1 = (|10>, |01>)  |occ_u, occ_d>
@@ -162,7 +162,7 @@ class SpinfulFermions_tJ(meta_operators):
                 n.set_block(ts=(1, 1), Ds=(2, 2), val=[[0, 0], [0, 1]])
             elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
                 n.set_block(ts=((0, 1, 1), (0, 1, 1)), Ds=(1, 1), val=1)
-            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+            else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
                 n.set_block(ts=((0, 1), (0, 1)), Ds=(1, 1), val=1)
         else:
             raise YastnError("spin should be equal 'u' or 'd'.")
@@ -179,7 +179,7 @@ class SpinfulFermions_tJ(meta_operators):
         elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
             h = Tensor(config=self.config, s=self.s, n=(0, 0, 0))
             h.set_block(ts=((0, 0, 0), (0, 0, 0)), Ds=(1, 1), val=1)
-        elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+        else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
             h = Tensor(config=self.config, s=self.s, n=(0, 0))
             h.set_block(ts=((0, 0), (0, 0)), Ds=(1, 1), val=1)
         return h
@@ -196,7 +196,7 @@ class SpinfulFermions_tJ(meta_operators):
             elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
                 cp = Tensor(config=self.config, s=self.s, n=(1, 0, 1))
                 cp.set_block(ts=((1, 0, 1), (0, 0, 0)), Ds=(1, 1), val=1)
-            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+            else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
                 cp = Tensor(config=self.config, s=self.s, n=(1, 0))
                 cp.set_block(ts=((1, 0), (0, 0)), Ds=(1, 1), val=1)
         elif spin == 'd':
@@ -209,7 +209,7 @@ class SpinfulFermions_tJ(meta_operators):
             elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
                 cp = Tensor(config=self.config, s=self.s, n=(0, 1, 1))
                 cp.set_block(ts=((0, 1, 1), (0, 0, 0)), Ds=(1, 1), val=1)
-            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+            else:  # self._sym == 'U1xU1'; charges == (occ_u, occ_d)
                 cp = Tensor(config=self.config, s=self.s, n=(0, 1))
                 cp.set_block(ts=((0, 1), (0, 0)), Ds=(1, 1), val=1)
         else:
@@ -228,7 +228,7 @@ class SpinfulFermions_tJ(meta_operators):
             elif self._sym == 'U1xU1xZ2': # charges <-> (ocupation up, occupation down, total_parity)
                 c = Tensor(config=self.config, s=self.s, n=(-1, 0, 1))
                 c.set_block(ts=((0, 0, 0), (1, 0, 1)), Ds=(1, 1), val=1)
-            elif self._sym == 'U1xU1':  # charges <-> (ocupation up, occupation down)
+            else:  # self._sym == 'U1xU1'; charges <-> (ocupation up, occupation down)
                 c = Tensor(config=self.config, s=self.s, n=(-1, 0))
                 c.set_block(ts=((0, 0), (1, 0)), Ds=(1, 1), val=1)
         elif spin == 'd':
@@ -241,7 +241,7 @@ class SpinfulFermions_tJ(meta_operators):
             elif self._sym == 'U1xU1xZ2':
                 c = Tensor(config=self.config, s=self.s, n=(0, -1, 1))
                 c.set_block(ts=((0, 0, 0), (0, 1, 1)), Ds=(1, 1), val=1)
-            elif self._sym == 'U1xU1':
+            else:  # self._sym == 'U1xU1'
                 c = Tensor(config=self.config, s=self.s, n=(0, -1))
                 c.set_block(ts=((0, 0), (0, 1)), Ds=(1, 1), val=1)
         else:

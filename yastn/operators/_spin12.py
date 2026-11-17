@@ -78,7 +78,7 @@ class Spin12(meta_operators):
         """
         if self._sym in ('dense', 'Z2'):
             return None
-        if self._sym == 'U1':
+        else:  # self._sym == 'U1'
             return lambda t: -t[0]
 
     def I(self) -> Tensor:
