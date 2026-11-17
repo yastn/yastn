@@ -6,6 +6,8 @@
   (off-diagonal ones only for `Z2` and `U1`).
 - new symmetries `yastn.sym.sym_U1xU1xU1` and `yastn.sym.sym_U1xU1xU1xZ2`, available in `make_config`
   as `sym='U1xU1xU1'` and `sym='U1xU1xU1xZ2'`.
+- new `yastn.sym.SYMMETRIES` registry mapping names to predefined symmetries; `make_config(sym=<str>)`
+  resolves names there, and its error message lists the registered names.
 
 
 15-11-2026

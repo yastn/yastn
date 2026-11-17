@@ -28,6 +28,60 @@ _COLORS = ('r', 'g', 'b')
 # Occupations |n_r n_g n_b> in the common dense order, grouped by parity and then by total occupation.
 _STATES = ((0, 0, 0), (1, 1, 0), (1, 0, 1), (0, 1, 1), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1))
 
+# Dense 8x8 operators in the basis of _STATES; rows index output states, columns index input states.
+#              |000> |110> |101> |011> |100> |010> |001> |111>
+_N = {'r': np.diag([0, 1, 1, 0, 1, 0, 0, 1]),
+      'g': np.diag([0, 1, 0, 1, 0, 1, 0, 1]),
+      'b': np.diag([0, 0, 1, 1, 0, 0, 1, 1])}
+
+# Creation operators for indistinguishable species (Z2, U1, U1xU1xU1xZ2),
+# with |n_r n_g n_b> = (cp_r)^{n_r} (cp_g)^{n_g} (cp_b)^{n_b} |000>, i.e.,
+# cp_g gets the sign (-1)^{n_r} and cp_b gets the sign (-1)^{n_r + n_g}.
+_CP = {'r': np.array([[0, 0, 0, 0, 0, 0, 0, 0],    # <000|
+                      [0, 0, 0, 0, 0, 1, 0, 0],    # <110|  cp_r |010> =  |110>
+                      [0, 0, 0, 0, 0, 0, 1, 0],    # <101|  cp_r |001> =  |101>
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <011|
+                      [1, 0, 0, 0, 0, 0, 0, 0],    # <100|  cp_r |000> =  |100>
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <010|
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <001|
+                      [0, 0, 0, 1, 0, 0, 0, 0]]),  # <111|  cp_r |011> =  |111>
+       'g': np.array([[0, 0, 0, 0, 0, 0, 0, 0],    # <000|
+                      [0, 0, 0, 0, -1, 0, 0, 0],   # <110|  cp_g |100> = -|110>
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <101|
+                      [0, 0, 0, 0, 0, 0, 1, 0],    # <011|  cp_g |001> =  |011>
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <100|
+                      [1, 0, 0, 0, 0, 0, 0, 0],    # <010|  cp_g |000> =  |010>
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <001|
+                      [0, 0, -1, 0, 0, 0, 0, 0]]), # <111|  cp_g |101> = -|111>
+       'b': np.array([[0, 0, 0, 0, 0, 0, 0, 0],    # <000|
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <110|
+                      [0, 0, 0, 0, -1, 0, 0, 0],   # <101|  cp_b |100> = -|101>
+                      [0, 0, 0, 0, 0, -1, 0, 0],   # <011|  cp_b |010> = -|011>
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <100|
+                      [0, 0, 0, 0, 0, 0, 0, 0],    # <010|
+                      [1, 0, 0, 0, 0, 0, 0, 0],    # <001|  cp_b |000> =  |001>
+                      [0, 1, 0, 0, 0, 0, 0, 0]])}  # <111|  cp_b |110> =  |111>
+
+# Creation operators for distinguishable species (U1xU1xU1); no Jordan-Wigner signs,
+# as fermionic statistics between species is handled by swap gates.
+_CP_U1xU1xU1 = {'r': _CP['r'],
+                'g': np.array([[0, 0, 0, 0, 0, 0, 0, 0],    # <000|
+                               [0, 0, 0, 0, 1, 0, 0, 0],    # <110|  cp_g |100> =  |110>
+                               [0, 0, 0, 0, 0, 0, 0, 0],    # <101|
+                               [0, 0, 0, 0, 0, 0, 1, 0],    # <011|  cp_g |001> =  |011>
+                               [0, 0, 0, 0, 0, 0, 0, 0],    # <100|
+                               [1, 0, 0, 0, 0, 0, 0, 0],    # <010|  cp_g |000> =  |010>
+                               [0, 0, 0, 0, 0, 0, 0, 0],    # <001|
+                               [0, 0, 1, 0, 0, 0, 0, 0]]),  # <111|  cp_g |101> =  |111>
+                'b': np.array([[0, 0, 0, 0, 0, 0, 0, 0],    # <000|
+                               [0, 0, 0, 0, 0, 0, 0, 0],    # <110|
+                               [0, 0, 0, 0, 1, 0, 0, 0],    # <101|  cp_b |100> =  |101>
+                               [0, 0, 0, 0, 0, 1, 0, 0],    # <011|  cp_b |010> =  |011>
+                               [0, 0, 0, 0, 0, 0, 0, 0],    # <100|
+                               [0, 0, 0, 0, 0, 0, 0, 0],    # <010|
+                               [1, 0, 0, 0, 0, 0, 0, 0],    # <001|  cp_b |000> =  |001>
+                               [0, 1, 0, 0, 0, 0, 0, 0]])}  # <111|  cp_b |110> =  |111>
+
 _SQ3 = 1 / np.sqrt(3)
 _GELL_MANN = {1: [[0, 1, 0], [1, 0, 0], [0, 0, 0]],
               2: [[0, -1j, 0], [1j, 0, 0], [0, 0, 0]],
@@ -105,15 +159,10 @@ class ColorfulFermions(meta_operators):
 
     def _dense_cp(self, color) -> np.ndarray:
         """ Creation operator as 8x8 matrix in the basis of _STATES. """
-        ic = self._color_index(color)
-        jw = self._sym != 'U1xU1xU1'  # Jordan-Wigner signs for indistinguishable species
-        mat = np.zeros((8, 8))
-        for ind, st in enumerate(_STATES):
-            if st[ic] == 0:
-                new = tuple(1 if i == ic else x for i, x in enumerate(st))
-                sgn = (-1) ** sum(st[:ic]) if jw else 1
-                mat[_STATES.index(new), ind] = sgn
-        return mat
+        self._color_index(color)
+        if self._sym == 'U1xU1xU1':
+            return _CP_U1xU1xU1[color]
+        return _CP[color]
 
     def _from_dense(self, mat, name='operator') -> Tensor:
         """ Build symmetric operator from 8x8 matrix in the basis of _STATES. """
@@ -166,9 +215,10 @@ class ColorfulFermions(meta_operators):
     def vec_n(self, val=(0, 0, 0)) -> Tensor:
         r""" State with occupation given by tuple (n_r, n_g, n_b). """
         val = tuple(val) if isinstance(val, (tuple, list)) else val
-        if val not in self._state_charge:
-            raise YastnError('Occupations given by val should be a tuple (n_r, n_g, n_b) with elements 0 or 1.')
-        t = self._state_charge[val]
+        try:
+            t = self._state_charge[val]
+        except (KeyError, TypeError):  # TypeError for unhashable val
+            raise YastnError('Occupations given by val should be a tuple (n_r, n_g, n_b) with elements 0 or 1.') from None
         inds = self._sectors[t]
         vals = [1 if _STATES[ind] == val else 0 for ind in inds]
         vec = Tensor(config=self.config, s=(1,), n=t)
@@ -181,8 +231,8 @@ class ColorfulFermions(meta_operators):
 
     def n(self, color='r') -> Tensor:
         r""" Particle number operator for :code:`color` in :code:`'r'`, :code:`'g'`, or :code:`'b'`. """
-        ic = self._color_index(color)
-        return self._from_dense(np.diag([float(st[ic]) for st in _STATES]))
+        self._color_index(color)
+        return self._from_dense(_N[color])
 
     def cp(self, color='r') -> Tensor:
         r""" Creation operator for :code:`color` in :code:`'r'`, :code:`'g'`, or :code:`'b'`. """

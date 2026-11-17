@@ -23,3 +23,15 @@ from .sym_Z2 import sym_Z2
 from .sym_Z3 import sym_Z3
 from .sym_abelian import sym_abelian
 from .sym_Z2xU1 import sym_Z2xU1
+
+# Symmetries that can be selected by name, e.g., yastn.make_config(sym='U1').
+# This is the single place to register a new predefined symmetry.
+SYMMETRIES = {"dense": sym_none,
+              "none": sym_none,
+              "Z2": sym_Z2,
+              "Z3": sym_Z3,
+              "U1": sym_U1,
+              "U1xU1": sym_U1xU1,
+              "U1xU1xZ2": sym_U1xU1xZ2,
+              "U1xU1xU1": sym_U1xU1xU1,
+              "U1xU1xU1xZ2": sym_U1xU1xU1xZ2}

@@ -105,9 +105,10 @@ def test_colorful_fermions(config_kwargs):
     with pytest.raises(yastn.YastnError):
         ops_Z2.n(color=1)
         # color should be equal 'r', 'g', or 'b'.
-    with pytest.raises(yastn.YastnError):
-        ops_Z2.vec_n((1, 0))
-        # Occupations given by val should be a tuple (n_r, n_g, n_b) with elements 0 or 1.
+    for val in ((1, 0), (1, 0, 2), np.array([1, 0, 0]), [[1, 0], 0]):
+        with pytest.raises(yastn.YastnError):
+            ops_Z2.vec_n(val)
+            # Occupations given by val should be a tuple (n_r, n_g, n_b) with elements 0 or 1.
 
 
 def test_colorful_fermions_su3(config_kwargs):

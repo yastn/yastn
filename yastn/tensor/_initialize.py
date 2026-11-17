@@ -25,20 +25,9 @@ from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, fin
 from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
 from ._yastnerror import YastnError
 from ..backend import backend_np, import_backend
-from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2, sym_U1xU1xU1, sym_U1xU1xU1xZ2
+from ..sym import sym_none, SYMMETRIES
 
 __all__ = ['make_config']
-
-
-_syms = {"dense": sym_none,
-         "none": sym_none,
-         "U1": sym_U1,
-         "Z2": sym_Z2,
-         "Z3": sym_Z3,
-         "U1xU1": sym_U1xU1,
-         "U1xU1xZ2": sym_U1xU1xZ2,
-         "U1xU1xU1": sym_U1xU1xU1,
-         "U1xU1xU1xZ2": sym_U1xU1xU1xZ2}
 
 
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
@@ -64,8 +53,8 @@ def make_config(**kwargs) -> _config:
         Specify abelian symmetry. To see how YASTN defines symmetries,
         see :class:`yastn.sym.sym_abelian`.
         Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
-        For predefined symmetries, takes string input from
-        'none' (or 'dense'), 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2', 'U1xU1xU1', 'U1xU1xU1xZ2'.
+        Predefined symmetries can be selected by name, e.g., ``'Z2'`` or ``'U1'``;
+        the available names are the keys of ``yastn.sym.SYMMETRIES``.
 
     default_device : str
         Tensors can be stored on various devices as supported by ``backend``
@@ -132,9 +121,20 @@ def make_config(**kwargs) -> _config:
         kwargs["sym"] = sym_none
     elif isinstance(kwargs["sym"], str):
         try:
-            kwargs["sym"] = _syms[kwargs["sym"]]
+            kwargs["sym"] = SYMMETRIES[kwargs["sym"]]
         except KeyError:
-            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2', 'U1xU1xU1', 'U1xU1xU1xZ2'.")
+            names = ', '.join(repr(name) for name in SYMMETRIES)
+            raise YastnError(f"sym encoded as string only supports: {names}.") from None
+    elif not all(hasattr(kwargs["sym"], attr) for attr in ("SYM_ID", "NSYM", "fuse")):
+        raise YastnError("sym should be a str or a symmetry class defining SYM_ID, NSYM and fuse; "
+                         "see yastn.sym.sym_abelian.")
+
+    fermionic = kwargs.get("fermionic", False)
+    if isinstance(fermionic, tuple):
+        if len(fermionic) != kwargs["sym"].NSYM or not all(isinstance(f, bool) for f in fermionic):
+            raise YastnError(f"fermionic given as a tuple should contain sym.NSYM={kwargs['sym'].NSYM} bools.")
+    elif not isinstance(fermionic, bool):
+        raise YastnError("fermionic should be a bool or a tuple of bools.")
 
     if kwargs["sym"].NSYM == 0 :
         if kwargs.get("tensordot_policy", None) in [None, "no_fusion"]:

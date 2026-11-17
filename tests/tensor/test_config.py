@@ -57,13 +57,36 @@ def test_make_config(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     assert config_U1.sym.SYM_ID == 'U1'
 
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError, match="sym encoded as string only supports:"):
         yastn.make_config(sym="random_name")
-        #  sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'
+        # sym encoded as string only supports: names listed in yastn.sym.SYMMETRIES
+    for sym in (None, 3, object()):
+        with pytest.raises(yastn.YastnError, match="sym should be a str or a symmetry class"):
+            yastn.make_config(sym=sym)
+            # sym should be a str or a symmetry class defining SYM_ID, NSYM and fuse; see yastn.sym.sym_abelian.
+    assert yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs).sym.SYM_ID == 'Z2xU1'
 
     with pytest.raises(yastn.YastnError):
         yastn.make_config(backend="random_name")
         # backend encoded as string only supports: 'np', 'torch'
+
+    # fermionic is a bool, or a tuple with one bool per symmetry component
+    assert yastn.make_config(sym='U1', fermionic=True, **config_kwargs).fermionic is True
+    config = yastn.make_config(sym='U1xU1xU1xZ2', fermionic=(False, False, False, True), **config_kwargs)
+    assert config.fermionic == (False, False, False, True)
+
+    with pytest.raises(yastn.YastnError, match="sym.NSYM=4 bools"):
+        yastn.make_config(sym='U1xU1xU1xZ2', fermionic=(False, False, True), **config_kwargs)
+        # fermionic given as a tuple should contain sym.NSYM=4 bools.
+    with pytest.raises(yastn.YastnError, match="sym.NSYM=3 bools"):
+        yastn.make_config(sym='U1xU1xZ2', fermionic=(False, False, 1), **config_kwargs)
+        # fermionic given as a tuple should contain sym.NSYM=3 bools.
+    with pytest.raises(yastn.YastnError, match="bool or a tuple of bools"):
+        yastn.make_config(sym='U1xU1', fermionic=[True, True], **config_kwargs)
+        # fermionic should be a bool or a tuple of bools.
+    with pytest.raises(yastn.YastnError, match="bool or a tuple of bools"):
+        yastn.make_config(sym='U1', fermionic=1, **config_kwargs)
+        # fermionic should be a bool or a tuple of bools.
 
 
 if __name__ == '__main__':
