@@ -137,6 +137,10 @@ def test_product_mpo(config_kwargs, tol=1e-12):
         assert all(I[site].s == (-1, 1, 1, -1) for site in I.sweep())
 
         with pytest.raises(yastn.YastnError,
+                           match="virtual_leg: ind should be 'first' or 'last'"):
+            I.virtual_leg('middle')
+
+        with pytest.raises(yastn.YastnError,
                            match="Operator should have ndim = 2."):
             mps.product_mpo(ops.vec_z(val=1), N=8)
 
@@ -388,6 +392,9 @@ def test_MpsMpoOBC_copy(config_kwargs):
     assert psi.A is not phi.A and psi is not phi
     assert all(psi[n] is phi[n] for n in psi.A)
 
+    phi = psi.on_bra().shallow_copy()  # shallow copy keeps the flag
+    assert phi.flag == 'on_bra' and not hasattr(psi, 'flag')
+
 
 @pytest.mark.parametrize('N', [6, 1])
 def test_MpsMpoOBC_to_tensor(config_kwargs, N):
@@ -411,6 +418,9 @@ def test_MpsMpoOBC_to_tensor(config_kwargs, N):
         psi2 = mps.mps_from_tensor(tpsi, canonize=to)
         assert (psi - psi2).norm() < 1e-10
         assert psi2.is_canonical(to=to)
+
+    psi2 = mps.mps_from_tensor(tpsi, opts_svd={'tol': 1e-13})  # explicit truncation
+    assert (psi - psi2).norm() < 1e-10
 
     for to in ['first', 'last']:
         op2 = mps.mpo_from_tensor(top, canonize=to)

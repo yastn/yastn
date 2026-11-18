@@ -73,8 +73,7 @@ def Env(bra, target, **kwargs):
                 return Env_sum([Env(bra, [o, ket], **kwargs) for o in op])
             else:
                 raise YastnError("Env: Input cannot be parsed.")
-        if len(target) > 2:
-            raise YastnError("Env: Input cannot be parsed.")
+        raise YastnError("Env: Input cannot be parsed.")  # len(target) > 2
 
     # simple environments are handled
     # we flatten more complicated ones into Env_sum
@@ -166,6 +165,8 @@ class EnvParent(metaclass=abc.ABCMeta):
             self.F[n, n + 1] = self.update_env_to_last(self.F[n - 1, n], n)
         elif to == 'first':
             self.F[n, n - 1] = self.update_env_to_first(self.F[n + 1, n], n)
+        else:
+            raise YastnError("Env: to should be 'first' or 'last'.")
 
     @abc.abstractmethod
     def Heff0(self, C, bd) -> Tensor:
@@ -344,14 +345,6 @@ class Env2(EnvParent):
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[self.N, self.N - 1] = eye(self.config, legs=legs, isdiag=False)
 
-    def shallow_copy(self):
-        r"""
-        A shallow copy of environment class, that creates a new copy of dictionary storing env tensors.
-        """
-        env = copy.copy(self)
-        env.F = dict(self.F)
-        return env
-
     def factor(self):
         return self.bra.factor * self.ket.factor
 
@@ -375,7 +368,7 @@ class Env2(EnvParent):
         axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
         return tensordot(self.bra.A[n].conj(), tmp, axes=axes)
 
-    def Heff0(self, C, bd):
+    def Heff0(self, C, bd):  # pragma: no cover
         raise NotImplementedError("Should not be triggered by current higher-level functions.")
 
     def Heff1(self, A, n):
@@ -409,7 +402,7 @@ class Env2(EnvParent):
             axes = ((2, 0), (0, 1)) if self.nr_phys == 1 else ((3, 0, 2), (0, 1, 3))
             self.F[n, n + 1] = tensordot(tmp, self.ket.A[n], axes=axes)
 
-    def charges_missing(self, n):
+    def charges_missing(self, n):  # pragma: no cover
         raise NotImplementedError("Should not be triggered by current higher-level functions.")
 
 
@@ -417,7 +410,8 @@ class Env_project(Env2):
     def __init__(self, bra, proj, penalty=100):
         super().__init__(bra, proj)
         self.penalty = penalty
-        assert self.nr_phys == 1, "Env_project works only for MPS, i.e., bra.nr_phys==1. Ask developers if extension needed."
+        if self.nr_phys != 1:
+            raise YastnError("Env_project works only for MPS, i.e., bra.nr_phys==1. Ask developers if extension needed.")
 
     def Heff1(self, A, n):
         tmp = self.ket.A[n] @ self.F[n + 1, n]
@@ -561,6 +555,8 @@ class Env_mps_mpo_mps_precompute(EnvParent_3_obc):
                 tmp = tensordot(tmp, self.op.A[n], axes=((2, 1), (2, 3)))
                 tmp = tensordot(tmp, self.bra.A[n].conj(), axes=((3, 1), (1, 2)))
             self.F[n, n - 1] = tmp
+        else:
+            raise YastnError("Env: to should be 'first' or 'last'.")
 
     def get_FL(self, n):
         if (n - 1, n, n) not in self.F:

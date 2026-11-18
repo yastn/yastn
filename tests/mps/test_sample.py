@@ -55,6 +55,11 @@ def test_sample_mps(config_kwargs):
         # number of occurances in samples is wihin the expected standard deviation.
     assert np.allclose(unique, states)
     assert all(abs(pr - probs[ind]) < 1e-10 for pr, ind in zip(probabiliies, inds))
+    #
+    # psi already canonical to the first site is sampled directly
+    psi.canonize_(to='first')
+    samples = mps.sample(psi, projectors=vecs, number=50)
+    assert all(any((sample == state).all() for state in states) for sample in samples)
 
 
 def test_sample_mps_purification(config_kwargs):

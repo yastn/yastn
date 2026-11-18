@@ -74,11 +74,11 @@ Hamiltonian for nearest-neighbor hopping/XX model (Generator)
 Save and load MPS/MPO
 ---------------------
 
-MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file.
-:ref:`YASTN configuration<tensor/configuration:yastn configuration>`
-with matching symmetry has to be provided
-for on-site MPS/MPO tensors
-when loading either from a dictionary or HDF5 file.
+MPS/MPO can be saved to and loaded from a dictionary.
+When loading, the configuration stored in the dictionary is used by default.
+Optionally, a :ref:`YASTN configuration<tensor/configuration:yastn configuration>`
+can be provided to override some of its options, e.g., the backend, device, or ``tensordot_policy``.
+Its symmetry and fermionic statistics have to match the stored ones; otherwise, an error is raised.
 
 Using Python's dictionary
 ^^^^^^^^^^^^^^^^^^^^^^^^^

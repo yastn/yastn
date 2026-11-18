@@ -169,7 +169,6 @@ class Peps(Lattice):
         elif dirn == 'v':
             periodic = (self.boundary == "cylinder")
             op = Mpo(N=self.Nx, periodic=periodic)
-            op.tol = self._site_data['tol'] if 'tol' in self._site_data else None
             for nx in range(self.Nx):
                 site = (nx, n)
                 psi = self[site]

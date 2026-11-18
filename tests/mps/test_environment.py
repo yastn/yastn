@@ -117,6 +117,45 @@ def test_env_setup(config_kwargs):
     env.measure((4, 6))
 
 
+@pytest.mark.parametrize('sym', ['Z2', 'U1'])
+def test_env_hole(config_kwargs, sym, tol=1e-12):
+    """
+    Env(bra, [op, ket]).hole(n) is the environment of the MPO tensor op[n] in <bra|op|ket>,
+    with legs ordered as in op[n]. It is used in Monte Carlo sampling of PEPS.
+    """
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
+    N = 6
+    I = mps.product_mpo(ops.I(), N)
+    terms = [mps.Hterm(1.0, [i, j], [ops.cp(), ops.c()]) for i in range(N) for j in range(N) if abs(i - j) == 1]
+    terms += [mps.Hterm(0.3, [i], [ops.n()]) for i in range(N)]
+    H0 = mps.generate_mpo(I, terms)
+    HP = mps.Mpo(N, periodic=True)  # the same operator as MpoPBC
+    for i in range(N):
+        HP[(i + N // 2) % N] = H0[i].copy()
+    n = (N // 2,) if sym == 'U1' else (1,)
+
+    for H, env_class in [(H0, 'Env_mps_mpo_mps'), (HP, 'Env_mps_mpopbc_mps')]:
+        H = 0.7 * H  # non-trivial factors of op, bra, and ket
+        bra = 1.3 * mps.random_mps(I, n=n, D_total=6)
+        ket = 2 * mps.random_mps(I, n=n, D_total=5)
+        env = mps.Env(bra, [H, ket]).setup_(to='first').setup_(to='last')
+        assert type(env).__name__ == env_class
+
+        ref = mps.vdot(bra, H, ket)
+        for k in range(N):
+            hole = env.hole(k)
+            val = hole.tensordot(H[k], axes=((0, 1, 2, 3), (0, 1, 2, 3))).to_number() * env.factor()
+            assert abs(val - ref) < tol * abs(ref)
+            #
+            # hole is a linear functional of the tensor at site k
+            X = yastn.rand(H.config, legs=H[k].get_legs(), n=H[k].n)
+            H2 = H.shallow_copy()
+            H2[k] = X
+            val = hole.tensordot(X, axes=((0, 1, 2, 3), (0, 1, 2, 3))).to_number() * env.factor()
+            ref2 = mps.vdot(bra, H2, ket)
+            assert abs(val - ref2) < tol * abs(ref2)
+
+
 def test_env_raise(config_kwargs):
     ops = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
     I12 = mps.product_mpo(ops.I(), 12)
@@ -158,6 +197,11 @@ def test_env_raise(config_kwargs):
         H12pbc = mps.Mpo(12, periodic=True)
         mps.Env(H12, [H12pbc, H12])
         # Env: Application of MpoPBC on Mpo is not supported. Contact developers to add this functionality.
+    for precompute in (False, True):
+        env = mps.Env(psi12, [H12, psi12], precompute=precompute).setup_(to='first')
+        with pytest.raises(yastn.YastnError, match="to should be 'first' or 'last'"):
+            env.update_env_(0, to='right')
+            # Env: to should be 'first' or 'last'.
 
 
 if __name__ == '__main__':

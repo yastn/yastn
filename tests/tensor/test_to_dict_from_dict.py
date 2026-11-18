@@ -162,24 +162,7 @@ def check_to_numpy(a1, config):
     are_identical_tensors(a2, b2)
 
 
-# def check_to_hdf5(a, *args):
-#     """ Test if two Tensor-s have the same values. """
-#     h5py = pytest.importorskip("h5py")
-#     try:
-#         os.remove("tmp.h5")
-#     except OSError:
-#         pass
-#     with h5py.File('tmp.h5', 'w') as f:
-#         a.save_to_hdf5(f, './')
-#     with h5py.File('tmp.h5', 'r') as f:
-#         b = yastn.load_from_hdf5(a.config, f, './')
-#     os.remove("tmp.h5")
-#     b.is_consistent()
-#     assert yastn.are_independent(a, b)
-#     are_identical_tensors(a.consume_transpose(), b)
-
-
-@pytest.mark.parametrize("test_f", [check_to_numpy])  # ,check_to_hdf5
+@pytest.mark.parametrize("test_f", [check_to_numpy])
 def test_save_load(config_kwargs, test_f):
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""

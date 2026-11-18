@@ -1,4 +1,11 @@
-import pytest
+import os
+
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
+import random  # noqa: E402
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402 -- after setting thread limits
 
 
 def pytest_addoption(parser):
@@ -11,6 +18,8 @@ def pytest_addoption(parser):
     parser.addoption("--long_tests", help='run long duration tests', action='store_true', default=False)
     parser.addoption("--ray", help='tests using ray', action='store_true', default=False)
     parser.addoption("--devices", help='comma-separated device list for multi-device tests, e.g. cuda:0,cuda:1,cuda:2', default=None, action='store')
+    parser.addoption("--seed", help='seed for random number generators, reset before each test; random if not given',
+                     type=int, default=None, action='store')
 
 
 @pytest.fixture
@@ -23,11 +32,42 @@ def config_kwargs(request):
 
 
 def pytest_configure(config):
+    # A single seed for the whole run; xdist workers get the one chosen by the controller.
+    if hasattr(config, 'workerinput'):
+        config.option.seed = config.workerinput['seed']
+    elif config.option.seed is None:
+        config.option.seed = random.randrange(2 ** 32)
     config.addinivalue_line(
         "markers",
         "exclude_fusion_scatter_tiled: skip the 'tiled' fuse-scatter path variant for this test "
         "(e.g. gradcheck tests, which rerun forward O(numel) times so a small tile chunk is "
         "pathologically slow).")
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_configure_node(node):
+    """ pytest-xdist hook: pass the controller's seed to a worker. """
+    node.workerinput['seed'] = node.config.option.seed
+
+
+def pytest_report_header(config):
+    return f"random seed: {config.option.seed} (reproduce with --seed={config.option.seed})"
+
+
+@pytest.fixture(autouse=True)
+def _reset_random_seed(request):
+    """
+    Reset all random number generators to the run seed before each test,
+    so that the outcome of a test does not depend on test order or on xdist scheduling.
+    """
+    seed = request.config.option.seed
+    random.seed(seed)
+    np.random.seed(seed)
+    from yastn.backend import backend_np
+    backend_np.random_seed(seed)
+    if 'torch' in request.config.getoption("--backend"):
+        from yastn.backend import backend_torch
+        backend_torch.random_seed(seed)
 
 
 @pytest.fixture(params=['scatter', 'tiled', 'hybrid', 'loop'], ids=['scatter', 'tiled', 'hybrid', 'loop'])

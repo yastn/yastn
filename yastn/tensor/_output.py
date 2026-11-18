@@ -111,30 +111,6 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
     return d
 
 
-# def save_to_hdf5(a, file, path) -> None:
-#     """
-#     Export tensor into hdf5 type file.
-
-#     Complementary function is :meth:`yastn.load_from_hdf5`.
-
-#     Parameters
-#     ----------
-#     a : yastn.Tensor
-#         tensor to export.
-#     """
-#     a = a.consume_transpose()
-#     _d = a.config.backend.to_numpy(a._data)
-#     hfs = tuple(tuple(hf) for hf in a.hfs)
-#     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
-#     file.create_group(path+'/mfs/'+str(a.mfs))
-#     file.create_group(path+'/hfs/'+str(hfs))
-#     file.create_dataset(path+'/n', data=a.struct.n)
-#     file.create_dataset(path+'/s', data=a.struct.s)
-#     file.create_dataset(path+'/ts', data=a.struct.t)
-#     file.create_dataset(path+'/Ds', data=a.struct.D)
-#     file.create_dataset(path+'/matrix', data=_d)
-
-
 ############################
 #    output information    #
 ############################

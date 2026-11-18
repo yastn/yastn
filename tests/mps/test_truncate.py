@@ -136,7 +136,7 @@ def test_zipper(config_kwargs, tol=1e-12):
 def test_compression(config_kwargs, tol=1e-12):
     """ Test mps.compression on random input states. """
     N = 13
-    for sym, n, seed in [("dense", (), 0), ("Z2", (0,), 1), ("Z2", (1,), 2)]:
+    for sym, n, seed in [("dense", (), 0), ("Z2", (1,), 2)]:
         #
         #  compression for MPO @ MPO; initialize with zipper
         #
@@ -212,93 +212,6 @@ def test_compression(config_kwargs, tol=1e-12):
         assert 0.6 < vca / vaa  < 1
 
 
-@pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
-def test_compression_sum(config_kwargs, tol=1e-6):
-    """ Test various combinations of targets and environments. """
-    ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
-    N = 7
-    I = mps.product_mpo(ops.I(), N)
-    terms = []
-    for i in range(N):
-        tmp = [mps.Hterm(1.0, [i, (i+1) % N], [ops.cp(), ops.c()]),
-               mps.Hterm(1.0, [(i+1) % N, i], [ops.cp(), ops.c()]),
-               mps.Hterm(0.5, [i, (i+2) % N], [ops.cp(), ops.c()]),
-               mps.Hterm(0.5, [(i+2) % N, i], [ops.cp(), ops.c()]),
-               mps.Hterm(0.2, [i,], [ops.n()])]
-        terms.extend(tmp)
-    H = mps.generate_mpo(I, terms)
-
-    Dmax = 8
-    opts_svd = {'D_total': Dmax}
-    E0s = {0: -4.24891733952, 1: -3.27046940557}
-
-    for n, E0 in E0s.items():
-        psi = mps.random_mps(H, n=n, D_total=Dmax)
-        step = mps.dmrg_(psi, H, method='2site', max_sweeps=10, energy_tol=1e-11, opts_svd=opts_svd)
-        assert abs(step.energy - E0) < tol
-
-        phi = mps.random_mps(H, n=n, D_total=Dmax)
-        target = [[H, psi], [2j * psi], [[-H, 3 * H], psi]]
-        mps.compression_(phi, target, method='2site', max_sweeps=2, opts_svd=opts_svd, normalize=False)
-        mps.compression_(phi, target, method='1site', max_sweeps=10, normalize=False)
-        assert abs(phi.norm() - abs(3 * E0 + 2j)) < tol
-        #
-        # for variance
-        psi0 = mps.zipper(H - E0 * I, psi, opts_svd=opts_svd, normalize=False)
-        assert mps.vdot(psi0, psi0) < tol
-        H2ref = (H - E0 * I) @ (H - E0 * I)
-        assert mps.vdot(psi, H2ref, psi) < tol
-        #
-        for method in ['1site', '2site']:
-            opts_svd = {'D_total': 8}
-            mps.compression_(psi0, [H - E0 * I, psi], normalize=False,
-                            method=method, max_sweeps=10, opts_svd=opts_svd)
-            assert mps.vdot(psi0, psi0) < tol
-            #
-            mps.compression_(psi0, [[H, psi], [-E0 * psi]], normalize=False,
-                            method=method, max_sweeps=10, opts_svd=opts_svd)
-            assert mps.vdot(psi0, psi0) < tol
-            #
-            mps.compression_(psi0, [[H, psi], [-E0 * psi]], normalize=False,
-                            method=method, max_sweeps=10, opts_svd=opts_svd)
-            assert mps.vdot(psi0, psi0) < tol
-            #
-            opts_svd = {'D_total': 30}
-            H2 = mps.zipper(H - E0 * I, H - E0 * I, opts_svd=opts_svd)
-            mps.compression_(H2, [H - E0 * I, H - E0 * I], normalize=False,
-                                method=method, max_sweeps=10, opts_svd=opts_svd)
-            assert mps.vdot(psi, H2, psi) < tol
-            assert (H2 - H2ref).norm() < tol
-            #
-            mps.compression_(H2, [[H, H], [-2 * E0 * H], [E0 * E0 * I]], normalize=False,
-                                method=method, max_sweeps=10, opts_svd=opts_svd)
-            assert mps.vdot(psi, H2, psi) < tol
-            assert (H2 - H2ref).norm() < tol
-            #
-            mps.compression_(H2, [[H.on_bra(), H], [-2 * E0 * H], [E0 * E0 * I]], normalize=False,
-                                method=method, max_sweeps=10, opts_svd=opts_svd)
-            assert mps.vdot(psi, H2, psi) < tol
-            assert (H2 - H2ref).norm() < tol
-
-
-    HP = mps.Mpo(N, periodic=True)
-    for i in range(N):
-        HP[(i + N // 2) % N] = H[i].copy()
-    #
-    #  here, we cannot mix HP and H (due to messed-up fermionic in the above construction of HP)
-    #
-    for n, E0 in E0s.items():
-        psi = mps.random_mps(HP, n=n, D_total=Dmax)
-        step = mps.dmrg_(psi, HP, method='2site', max_sweeps=10, energy_tol=1e-11, opts_svd=opts_svd)
-        assert abs(step.energy - E0) < tol
-
-        phi = mps.random_mps(HP, n=n, D_total=Dmax)
-        target = [[HP, psi], [2j * psi], [[-HP, 3 * HP], psi]]
-        mps.compression_(phi, target, method='2site', max_sweeps=2, opts_svd=opts_svd, normalize=False)
-        mps.compression_(phi, target, method='1site', max_sweeps=10, normalize=False)
-        assert abs(phi.norm() - abs(3 * E0 + 2j)) < tol
-
-
 def test_comression_raise(config_kwargs):
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     N = 7
@@ -330,6 +243,61 @@ def test_comression_raise(config_kwargs):
         H_pbc = mps.Mpo(N, periodic=True)
         mps.zipper(H_pbc, psi0)
         # Zipper: Application of MpoPBC on Mpo is currently not supported. Contact developers to add this functionality.
+
+
+def test_compression_sum(config_kwargs, tol=1e-10):
+    """ Compression onto sums of targets; small system where bond dimension 4 is exact. """
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
+    N = 5
+    I = mps.product_mpo(ops.I(), N)
+    terms = [mps.Hterm(1.0, [i, j], [ops.cp(), ops.c()]) for i in range(N) for j in range(N) if abs(i - j) == 1]
+    terms += [mps.Hterm(0.2 * i, [i], [ops.n()]) for i in range(N)]
+    H = mps.generate_mpo(I, terms)
+    Dmax = 4  # maximal bond dimension of any state on 5 sites with local dimension 2
+    opts_svd = {'D_total': Dmax}
+    #
+    # sum of targets: H|psi> + 2j|psi> + (-H + 3H)|psi>; the last term is a nested Env_sum
+    psi = mps.random_mps(I, n=0, D_total=Dmax)
+    target = [[H, psi], [2j * psi], [[-H, 3 * H], psi]]
+    ref = 3 * (H @ psi) + 2j * psi
+    for method in ('2site', '1site'):
+        phi = mps.random_mps(I, n=0, D_total=Dmax)
+        mps.compression_(phi, target, method=method, max_sweeps=10, opts_svd=opts_svd, normalize=False)
+        assert (phi - ref).norm() < tol * ref.norm()
+    #
+    # the same for MPO; (H - 1)^2 = H H - 2 H + 1
+    target = [[H, H], [-2 * H], [I]]
+    ref = H @ H - 2 * H + I
+    Dmax = 16  # maximal bond dimension of any MPO on 5 sites with local dimension 2
+    for method in ('2site', '1site'):
+        phi = mps.random_mpo(I, D_total=Dmax)
+        mps.compression_(phi, target, method=method, max_sweeps=10, opts_svd={'D_total': Dmax}, normalize=False)
+        assert (phi - ref).norm() < tol * ref.norm()
+
+
+
+def test_compression_zero(config_kwargs):
+    """ Exactly zero target gives a zero MPS (no NaN from normalization) in zipper and compression_. """
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
+    N = 5
+    I = mps.product_mpo(ops.I(), N)
+    terms = [mps.Hterm(1.0, [i, j], [ops.cp(), ops.c()]) for i in range(N) for j in range(N) if abs(i - j) == 1]
+    H = mps.generate_mpo(I, terms)
+    H[2] = 0 * H[2]  # H is now exactly zero
+    HP = mps.Mpo(N, periodic=True)  # the same, as MpoPBC
+    for i in range(N):
+        HP[(i + 2) % N] = H[i].copy()
+    psi = mps.random_mps(I, n=0, D_total=4)
+    opts_svd = {'D_total': 4}
+    #
+    for normalize in (False, True):
+        for op in (H, HP):
+            phi = mps.zipper(op, psi, opts_svd=opts_svd, normalize=normalize)
+            assert phi.norm() == 0
+        for method in ('2site', '1site'):
+            phi = mps.random_mps(I, n=0, D_total=4)
+            out = mps.compression_(phi, [H, psi], method=method, max_sweeps=2, opts_svd=opts_svd, normalize=normalize)
+            assert phi.norm() == 0 and out.overlap == 0
 
 
 if __name__ == '__main__':

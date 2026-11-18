@@ -121,5 +121,27 @@ def test_svd_multiplets(config_kwargs):
             yastn.truncation_mask(S, eps_multiplet=1e-2, largest_gap=True)
 
 
+def test_truncation_mask_zero_spectrum(config_kwargs):
+    """ Without tol, an all-zero spectrum is truncated only by D_total and D_block (no nan from -inf * 0). """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    S = yastn.Tensor(config_U1, isdiag=True)
+    S.set_block(ts=(0, 0), Ds=3, val=[0, 0, 0])
+    S.set_block(ts=(1, 1), Ds=2, val=[0, 0])
+    #
+    assert kept(yastn.truncation_mask(S)) == {0: 3, 1: 2}
+    assert sum(kept(yastn.truncation_mask(S, D_total=4)).values()) == 4
+    assert kept(yastn.truncation_mask(S, D_block=1)) == {0: 1, 1: 1}
+    #
+    # with explicit tol, zero values are not above tol * max(S) and are truncated
+    assert kept(yastn.truncation_mask(S, tol=1e-12)) == {0: 0, 1: 0}
+    assert kept(yastn.truncation_mask(S, D_block=2, tol_block=1e-12)) == {0: 0, 1: 0}
+
+
+def kept(mask):
+    """ Number of elements kept by the mask in each charge sector. """
+    leg = mask.apply_mask(mask, axes=0).get_legs(axes=0)
+    return {t: dict(zip(leg.t, leg.D)).get((t,), 0) for t, in mask.get_legs(axes=0).t}
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

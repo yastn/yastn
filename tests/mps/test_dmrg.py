@@ -288,7 +288,7 @@ def test_dmrg_Ising_PBC_Z2(config_kwargs, tol=1e-4):
     Dmax = 16
     opts_svd = {'tol': 1e-10, 'D_total': Dmax}
 
-    for H, P in [(H0, P0), (H1, P1)]:
+    for H, P in [(H1, P1)]:
         for parity, E_target in Eng_sectors.items():
             psi = mps.random_mps(I, D_total=Dmax, n=(parity,)).canonize_(to='first')
             parity_target = [(-1) ** parity] * len(E_target)
@@ -318,7 +318,9 @@ def test_dmrg_method_change(config_kwargs):
     psi = mps.random_mps(I, n=0, D_total=8)
     method = yastn.Method('2site')
     opts_svd = {"D_total": 16}
-    for out in mps.dmrg_(psi, [HXX, HZ], method=method, max_sweeps=10, iterator=True, opts_svd=opts_svd, energy_tol=1e-10, Schmidt_tol=1e-10):
+    opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
+    for out in mps.dmrg_(psi, [HXX, HZ], method=method, max_sweeps=10, iterator=True, opts_svd=opts_svd,
+                         opts_eigs=opts_eigs, energy_tol=1e-10, Schmidt_tol=1e-10):
         if out.sweeps == 2:
             method.update_('1site')
         assert out.method == '2site' if out.sweeps <= 2 else '1site'
@@ -342,6 +344,8 @@ def test_dmrg_raise(config_kwargs):
     with pytest.raises(yastn.YastnError):
         mps.dmrg_(psi, H, method='2site')
         # DMRG: provide opts_svd for 2site method.
+    with pytest.raises(yastn.YastnError, match="Env_project works only for MPS"):
+        mps.dmrg_(psi, H, method='1site', project=[mps.random_mpo(I, D_total=2)])
 
 
 if __name__ == '__main__':

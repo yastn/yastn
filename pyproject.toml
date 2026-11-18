@@ -9,7 +9,7 @@ authors = [{name = "The YASTN Authors"},]
 maintainers = [{name = "Marek Rams", email = "marek.rams@uj.edu.pl"},
                {name = "Juraj Hasik", email = "juraj.hasik.sk@gmail.com"},]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 classifiers = [
@@ -20,10 +20,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "numpy>=1.21.6",
+    "numpy>=1.23.2",
     "scipy>=1.11.4",
     "tqdm",
-    "h5py",
     "opt_einsum"
 ]
 dynamic = ["version"]
@@ -33,7 +32,7 @@ include = ["yastn*"]
 exclude = ["docs*", "tests*"]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-cov", "pytest-randomly", "numpy!=2.4.5", "pytest-xdist"]
+test = ["pytest", "pytest-cov", "pytest-xdist", "pytest-random-order"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme", "graphviz", ]
 torch = ["torch>=2.10"]
 

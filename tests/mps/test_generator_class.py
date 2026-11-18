@@ -214,5 +214,23 @@ def test_latex2term_unit_tests():
         assert latex2term(x, param_dict) == test_x
 
 
+def test_generator_raise(config_kwargs):
+    """ Generator: identity MPO and validation of map and Is. """
+    N = 4
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
+    generate = mps.Generator(N, ops)
+    assert (generate.I() - mps.product_mpo(ops.I(), N)).norm() < 1e-12
+
+    with pytest.raises(yastn.YastnError, match="Map is inconsistent"):
+        mps.Generator(N, ops, map={0: 0, 1: 1, 2: 2, 3: 4})
+        # MPS: Map is inconsistent with mps of N sites.
+    with pytest.raises(yastn.YastnError, match="Is is inconsistent"):
+        mps.Generator(N, ops, Is={0: 'I', 1: 'I'})
+        # MPS: Is is inconsistent with map.
+    with pytest.raises(yastn.YastnError, match="do not contain identity"):
+        mps.Generator(N, ops, Is={i: 'Id' for i in range(N)})
+        # MPS: operators do not contain identity specified in Is.
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])

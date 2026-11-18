@@ -50,12 +50,18 @@ def test_double_peps_tensor_copy(config_kwargs):
         T0_dict = [fpeps.DoublePepsTensor.from_dict(d) for d in dicts]
         T0_split = [yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
 
+        # ind=None: conj() of real data may or may not share memory, depending on the numpy version
         for new, ind in zip([T0_conj, T0_copy, T0_clone, *T0_dict, *T0_split],
-                            [False, True, True, False, False, True, False, False, True]):
-            assert T0.ket.are_independent(new.ket, independent=ind)
-            assert T0.bra.are_independent(new.bra, independent=ind)
-            if op is not None:
-                assert op.are_independent(new.op, independent=ind)
+                            [None, True, True, False, False, True, False, False, True]):
+            if ind is None:
+                assert T0.ket is not new.ket and T0.bra is not new.bra
+                if op is not None:
+                    assert op is not new.op
+            else:
+                assert T0.ket.are_independent(new.ket, independent=ind)
+                assert T0.bra.are_independent(new.bra, independent=ind)
+                if op is not None:
+                    assert op.are_independent(new.op, independent=ind)
             assert T0.swaps is not new.swaps
             assert T0.swaps == new.swaps
 

@@ -261,35 +261,6 @@ def random_dense_mpo(N, D, d, **kwargs) -> MpsMpoOBC:
     return random_mpo(I, D_total=D)
 
 
-# def load_from_hdf5(config, file, my_address) -> MpsMpoOBC:
-#     r"""
-#     Create MPS/MPO from HDF5 file.
-
-#     Parameters
-#     ----------
-#     config: module | _config(NamedTuple)
-#         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-
-#     file: File
-#         A `pointer` to a file opened by the user
-
-#     my_address: str
-#         Name of a group in the file, where the Mps is saved, e.g., './state/'
-#     """
-
-#     nr_phys = int(file[my_address].get('nr_phys')[()])
-#     N = file[my_address].get('N')
-#     N = len(file[my_address+'/A'].keys()) if N is None else int(N[()])
-#     out_Mps = MpsMpoOBC(N, nr_phys=nr_phys)
-
-#     factor = file[my_address].get('factor')
-#     if factor:
-#         out_Mps.factor = factor[()]
-#     for n in range(out_Mps.N):
-#         out_Mps.A[n] = load_from_hdf5_tensor(config, file, my_address+'/A/'+str(n))
-#     return out_Mps
-
-
 def mps_from_tensor(ten, nr_phys=1, canonize='last', opts_svd=None) -> MpsMpoOBC:
     r"""
     Generate MPS from a tensor if ``nr_phys=1`` (the default)

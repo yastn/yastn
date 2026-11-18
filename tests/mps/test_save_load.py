@@ -19,57 +19,6 @@ import yastn
 import yastn.tn.mps as mps
 
 
-# @pytest.mark.parametrize('sym', ['dense', 'Z3', 'U1'])
-# def test_save_load_mps_hdf5(config_kwargs, sym, tol=1e-12):
-#     """
-#     Initialize random MPS and checks saving/loading to/from HDF5 file.
-#     """
-#     h5py = pytest.importorskip('h5py')
-#     #
-#     # generate random mps with 3-dimensional local spaces
-#     #
-#     ops = yastn.operators.Spin1(sym=sym, **config_kwargs)
-#     I = mps.product_mpo(ops.I(), N=31)
-#     psi = 2 * mps.random_mps(I, D_total=25)  # adding extra factor
-#     #
-#     # We delete file if it already exists.
-#     # (It is enough to clear the address './state' if the file already exists)
-#     #
-#     try:
-#         os.remove("tmp.h5")
-#     except OSError:
-#         pass
-#     #
-#     # We save the MPS to file 'tmp.h5' under the address 'state/'
-#     #
-#     with h5py.File('tmp.h5', 'a') as f:
-#         psi.save_to_hdf5(f, 'state/')
-#     #
-#     # To read MPS from HDF5 file, open the file and load the MPS stored
-#     # at address 'state/'.
-#     # Note: You have to provide valid YASTN configuration
-#     #
-#     config = ops.config
-#     with h5py.File('tmp.h5', 'r') as f:
-#         phi = mps.load_from_hdf5(config, f, './state/')
-#     #
-#     # Test psi == phi
-#     #
-#     assert (psi - phi).norm() < tol * psi.norm()
-#     #
-#     # Similarily, one can save and load MPO
-#     #
-#     psi = -1j * mps.random_mpo(I, D_total=8, dtype='complex128')
-#     psi.canonize_(to='last', normalize=False)  # extra cannonization
-#     psi.canonize_(to='first', normalize=False)  # retaining the norm
-#     with h5py.File('tmp.h5', 'w') as f:
-#         psi.save_to_hdf5(f, 'state/')
-#     with h5py.File('tmp.h5', 'r') as f:
-#         phi = mps.load_from_hdf5(config, f, './state/')
-#     os.remove("tmp.h5")
-#     assert (psi - phi).norm() < tol * psi.norm()
-
-
 @pytest.mark.parametrize('sym', ['dense', 'Z3', 'U1'])
 def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     """
@@ -116,6 +65,13 @@ def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     phi_pbc2 = yastn.from_dict(tmp3)
     assert type(phi_pbc1) is mps.MpoPBC
     assert type(phi_pbc2) is mps.MpoPBC
+
+    with pytest.raises(yastn.YastnError, match="does not match"):
+        mps.MpoPBC.from_dict(tmp)
+        # MpoPBC does not match d['type'] == MpsMpoOBC
+    with pytest.raises(yastn.YastnError, match="unsupported dict_ver"):
+        mps.MpsMpoOBC.from_dict({**tmp, 'dict_ver': -1})
+        # MpsMpoOBC.from_dict: unsupported dict_ver == -1.
 
 
 if __name__ == '__main__':

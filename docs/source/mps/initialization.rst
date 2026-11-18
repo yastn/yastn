@@ -119,9 +119,8 @@ Import and export MPS/MPO from/to different formats
 
 See examples at :ref:`examples/mps/build:save and load mps/mpo`.
 
-MPS/MPO can be saved as Python `dict` or `HDF5` file.
-The MPS/MPO previously serialized by :meth:`yastn.tn.mps.MpsMpoOBC.to_dict`
-or :meth:`yastn.tn.mps.MpsMpoOBC.save_to_hdf5` can be again deserialized into MPS/MPO.
+MPS/MPO can be serialized to a Python `dict` with :meth:`yastn.tn.mps.MpsMpoOBC.to_dict`
+and deserialized back into MPS/MPO with :meth:`yastn.tn.mps.MpsMpoOBC.from_dict`.
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.to_dict
 .. automethod:: yastn.tn.mps.MpsMpoOBC.from_dict

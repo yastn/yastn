@@ -450,6 +450,11 @@ def test_rdm(config_kwargs, nr_phys, tol=1e-12):
             res = yastn.einsum('abcdefgh,badcfehg', rho, f).item()
             ref = mps.vdot(psi, O, psi)
             assert abs(res - ref) < 1e-12
+    #
+    for sites in [(3, 3), (2, N), (-1, 4)]:
+        with pytest.raises(yastn.YastnError):
+            mps.rdm(psi, *sites)
+            # Repeated site or some sites outside of psi.
 
 
 if __name__ == '__main__':

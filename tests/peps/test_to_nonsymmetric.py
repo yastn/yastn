@@ -17,6 +17,7 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
+import yastn.tn.mps as mps
 
 tol = 1e-12  # pylint: disable=invalid-name
 
@@ -138,6 +139,23 @@ def test_env_boundary_mps_to_nonsymmetric(config_kwargs):
     dops = _dense_ops(ops)
     sz0, sz1 = env.measure_1site(ops.sz()), env_ns.measure_1site(dops['sz'])
     assert all(abs(sz0[s] - sz1[s]) < tol for s in psi.sites())
+
+
+@pytest.mark.parametrize("boundary", ["obc", "cylinder"])
+def test_transfer_mpo_to_nonsymmetric(config_kwargs, boundary):
+    """ Transfer MPO, where sites are DoublePepsTensor (MpoPBC for a cylinder), is converted site by site. """
+    ops = yastn.operators.Spin12(sym='U1', **config_kwargs)
+    psi = _random_peps(ops, dims=(3, 2), boundary=boundary)
+    op = psi.transfer_mpo(n=1, dirn='v')
+    assert isinstance(op, mps.MpoPBC) == (boundary == "cylinder")
+
+    op_ns = op.to_nonsymmetric()
+    assert type(op_ns) is type(op)
+    for n in op.sweep():
+        assert isinstance(op_ns[n], fpeps.DoublePepsTensor)
+        assert op_ns[n].config.sym.SYM_ID == 'dense'
+        assert abs(op_ns[n].fuse_layers().norm() - op[n].fuse_layers().norm()) < tol
+    assert op[0].config.sym.SYM_ID == 'U1'  # the original is not modified
 
 
 def test_to_nonsymmetric_fermionic(config_kwargs):

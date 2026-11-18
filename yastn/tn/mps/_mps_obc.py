@@ -169,7 +169,6 @@ class MpoPBC(_MpsMpoParent):
         which in some functions can be applied on Mps with OBC.
         """
         super().__init__(N=N, nr_phys=2)
-        self.tol = None
 
     def to_tensor(self) -> Tensor:
         r"""
@@ -321,35 +320,33 @@ class MpsMpoOBC(_MpsMpoParent):
             The default is ``True``, i.e., sets the norm to :math:`1`.
             The truncated Schmidt values (central block) at the end of the procedure are normalized to unity.
         """
-        # if self.pC is None:  does not happen now
-        #     return 0
-        discarded = 0.
-        if self.pC is not None:
+        if self.pC is None:  # no central block to diagonalize
+            return 0.
 
-            U, S, V = svd(self.A[self.pC], axes=(0, 1), sU=1)
-            nSold = S.norm()
+        U, S, V = svd(self.A[self.pC], axes=(0, 1), sU=1)
+        nSold = S.norm()
 
-            mask = truncation_mask(S, **opts_svd)
-            nSout = bitwise_not(mask).apply_mask(S, axes=0).norm()
-            discarded = nSout / nSold if nSold else 0.
+        mask = truncation_mask(S, **opts_svd)
+        nSout = bitwise_not(mask).apply_mask(S, axes=0).norm()
+        discarded = nSout / nSold if nSold else 0.
 
-            U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
-            nS = S.norm()
-            self.A[self.pC] = S / nS if nS else S
-            self.factor = 1 if normalize else self.factor * nS
+        U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
+        nS = S.norm()
+        self.A[self.pC] = S / nS if nS else S
+        self.factor = 1 if normalize else self.factor * nS
 
-            n1, n2 = self.pC
+        n1, n2 = self.pC
 
-            if n1 >= self.first:
-                ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = ncon([self.A[n1], U], (ax, (1, -2)))
-            else:
-                self.A[self.pC] = U @ self.A[self.pC]
+        if n1 >= self.first:
+            ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
+            self.A[n1] = ncon([self.A[n1], U], (ax, (1, -2)))
+        else:
+            self.A[self.pC] = U @ self.A[self.pC]
 
-            if n2 <= self.last:
-                self.A[n2] = V @ self.A[n2]
-            else:
-                self.A[self.pC] = self.A[self.pC] @ V
+        if n2 <= self.last:
+            self.A[n2] = V @ self.A[n2]
+        else:
+            self.A[self.pC] = self.A[self.pC] @ V
         return discarded
 
     def remove_central_(self) -> None:

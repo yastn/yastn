@@ -644,8 +644,8 @@ def truncation_mask(S, which='LR',
             finish = start + DD
             slc = slice(start, finish)
             D_bl = D_block[tt] if (isinstance(D_block, dict) and tt in D_block) else D_null
-            if which in ['LR', 'LM']:
-                tol_rel = tol_block[tt] if (isinstance(tol_block, dict) and tt in tol_block) else tol_null
+            tol_rel = tol_block[tt] if (isinstance(tol_block, dict) and tt in tol_block) else tol_null
+            if which in ['LR', 'LM'] and tol_rel > float('-inf'):  # -inf * max_abs(S) would be nan for S == 0
                 above_tol = ff(S.data[slc]) > tol_rel * backend.max_abs(S.data[slc])
                 D_tol = backend.sum_elements(above_tol).item()
                 D_bl = min(D_bl, D_tol)
@@ -658,7 +658,7 @@ def truncation_mask(S, which='LR',
             start = finish
     #
     D_total = min(D_total, len(S.data))
-    if which in ['LR', 'LM']:
+    if which in ['LR', 'LM'] and tol > float('-inf'):  # -inf * max_abs(S) would be nan for S == 0
         above_tol = ff(S.data) > tol * backend.max_abs(S.data)
         D_total = min(D_total, backend.sum_elements(above_tol).item())
     #

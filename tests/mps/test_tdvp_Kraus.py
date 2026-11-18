@@ -21,79 +21,80 @@ import yastn.tn.mps as mps
 
 
 def dephasing_channel(dt, gamma, ops):
-    p = np.exp(-dt * gamma)
+    """
+    Kraus operators of dephasing, rho -> (1 - p) rho + p Z rho Z, during time dt,
+    with p = (1 - exp(-2 gamma dt)) / 2, so that coherences decay as exp(-2 gamma dt).
+    Returns rank-3 tensor with the last leg enumerating Kraus operators.
+    """
+    p = (1 - np.exp(-2 * gamma * dt)) / 2
     I3 = ops.I().add_leg(axis=2, s=1)
-    X3 = ops.x().add_leg(axis=2, s=1)
-
-    tens = {0: np.sqrt(1 - p) * I3,
-            1: np.sqrt(p) * X3}
-    out = yastn.block(tens, common_legs=(0, 1))
-    return out
+    Z3 = ops.z().add_leg(axis=2, s=1)
+    return yastn.block({0: np.sqrt(1 - p) * I3, 1: np.sqrt(p) * Z3}, common_legs=(0, 1))
 
 
-@pytest.mark.parametrize('sym', ['Z2'])
-def test_tdvp_KZ_quench(config_kwargs, sym):
-    """
-    Simulate a slow quench across a quantum critical point in
-    a small transverse field Ising chain with periodic boundary conditions.
-    Compare with exact reference results.
-    """
-    #
-    N = 8  # Consider a system of 8 sites
-    #
-    # Load spin-1/2 operators
-    #
-    ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
-    ops.random_seed(seed=0)
-    #
-    # Hterm-s to generate H = -sum_i X_i X_{i+1} - g * Z_i
-    #
-    I = mps.product_mpo(ops.I(), N)  # identity MPO
-    termsXX = [mps.Hterm(-1, [i, i + 1], [ops.x(), ops.x()]) for i in range(N - 1)]
-    HXX = mps.generate_mpo(I, termsXX)
-    termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(N)]
-    HZ = mps.generate_mpo(I, termsZ)
-    #
-    # Kibble-Zurek quench across a critical point at gc = 1
-    # tauQ is the quench time
-    #
-    tauQ, gc = 1, 1
-    ti, tf = -tauQ, tauQ  # evolve from gi = 2 to gf = 0
-    H = lambda t: [HXX, (gc - t / tauQ) * HZ]  # linear quench
-    #
-    #
-    Dmax = 10
-    psi = mps.random_mps(I, D_total=Dmax)
-    # we will add auxiliary leg of dim=1
+def purification_from_mps(psi):
+    """ Add an auxiliary leg of dimension 1 to each tensor of MPS. """
     psi._nr_phys = 2
     for n in psi.sweep():
         psi[n] = psi[n].add_leg(axis=3, s=-1)
+    return psi
 
-    out = mps.dmrg_(psi, H(ti), method='2site', max_sweeps=2,
-                    opts_svd={'tol': 1e-6, 'D_total': Dmax})
-    out = mps.dmrg_(psi, H(ti), method='1site', max_sweeps=10,
-                    energy_tol=1e-12, Schmidt_tol=1e-12)
-    print(out)
+
+def test_tdvp_Kraus_dephasing(config_kwargs, tol=1e-10):
+    """
+    Spins in a time-dependent field H(t) = -h(t) sum_i Z_i with dephasing at rate gamma,
+    starting from all spins along x. Each spin evolves independently, with
+    <X_i>(t) = exp(-2 gamma t) cos(2 Phi(t)), where Phi(t) = int_0^t h(s) ds.
+    Here, H and dephasing commute, and the midpoint rule used for H(t) is exact for linear h(t),
+    so the result of tdvp_Kraus_ is exact.
+    """
+    N = 4
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
+    I = mps.product_mpo(ops.I(), N)
+    HZ = mps.generate_mpo(I, [mps.Hterm(-1, [i], [ops.z()]) for i in range(N)])
+    h = lambda t: 1 + 2 * t
+    Phi = lambda t: t + t ** 2
+    H = lambda t: h(t) * HZ
     #
-    Dmax = 8
-    DmaxK = 4
-    opts_expmv = {'hermitian': True, 'tol': 1e-12}
-    opts_svd = {'tol': 1e-6, 'D_total': Dmax}
-    opts_svdK = {'tol': 1e-6, 'D_total': DmaxK}
-    #
-    gamma = 0.01
+    gamma = 0.3
     K = lambda n, t, dt: dephasing_channel(dt, gamma, ops)
     #
-    for step in mps.tdvp_Kraus_(psi, H, K, times=(ti, 0, tf), dt=0.04,
-                          opts_svd=opts_svd, opts_expmv=opts_expmv, opts_svdK=opts_svdK):
-        #
+    psi = purification_from_mps(mps.product_mps(ops.vec_x(val=1), N))
+    opts = {'opts_expmv': {'hermitian': True, 'tol': 1e-13},
+            'opts_svd': {'D_total': 4}, 'opts_svdK': {'D_total': 4}}  # no truncation needed
+    #
+    times = (0, 0.25, 0.5)
+    for step, t in zip(mps.tdvp_Kraus_(psi, H, K, times=times, dt=0.05, **opts), times[1:]):
+        assert abs(step.tf - t) < 1e-12 and step.steps == 5 and not step.time_independent
+        EX = mps.measure_1site(psi, ops.x(), psi)
         EZ = mps.measure_1site(psi, ops.z(), psi)
-        EXX = mps.measure_2site(psi, ops.x(), ops.x(), psi, bonds='r1')
-        #
-        print(EZ)
-        print(EXX)
-        print(psi.norm())
+        ref = np.exp(-2 * gamma * t) * np.cos(2 * Phi(t))
+        assert all(abs(EX[n] - ref) < tol for n in range(N))
+        assert all(abs(EZ[n]) < tol for n in range(N))
+        assert abs(mps.vdot(psi, psi) - 1) < tol  # Kraus operators preserve the trace
 
+
+def test_tdvp_Kraus_raise(config_kwargs):
+    """ Input validation of tdvp_Kraus_; scalar times and yield_initial. """
+    N = 4
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
+    I = mps.product_mpo(ops.I(), N)
+    H = mps.generate_mpo(I, [mps.Hterm(-1, [i], [ops.z()]) for i in range(N)])
+    psi = purification_from_mps(mps.random_mps(I, D_total=4))
+    K = lambda n, t, dt: dephasing_channel(dt, 0.1, ops)
+    opts = {'opts_svd': {'D_total': 4}, 'opts_svdK': {'D_total': 2}}
+
+    with pytest.raises(yastn.YastnError, match="provide opts_svd and opts_svdK"):
+        next(mps.tdvp_Kraus_(psi, H, K, opts_svd={'D_total': 4}))
+    with pytest.raises(yastn.YastnError, match="dt should be positive"):
+        next(mps.tdvp_Kraus_(psi, H, K, dt=0, **opts))
+    with pytest.raises(yastn.YastnError, match="times should be an ascending tuple"):
+        next(mps.tdvp_Kraus_(psi, H, K, times=(0, 0.2, 0.1), **opts))
+
+    steps = list(mps.tdvp_Kraus_(psi, H, K, times=0.2, dt=0.1, yield_initial=True, **opts))
+    assert len(steps) == 2
+    assert steps[0].ti == steps[0].tf == 0 and steps[0].steps == 0
+    assert abs(steps[1].tf - 0.2) < 1e-12 and steps[1].steps == 2
 
 
 if __name__ == '__main__':

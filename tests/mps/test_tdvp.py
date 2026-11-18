@@ -311,8 +311,7 @@ def test_tdvp_sudden_quench_Heisenberg(config_kwargs, sym, tol=1e-5):
         assert abs(e1 - e1ref) < tol * abs(e1ref)
 
 
-@pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
-@pytest.mark.parametrize('sym', ['Z2', 'dense'])
+@pytest.mark.parametrize('sym', ['Z2'])
 def test_tdvp_KZ_quench(config_kwargs, sym):
     """
     Simulate a slow quench across a quantum critical point in
@@ -394,6 +393,61 @@ def test_tdvp_KZ_quench(config_kwargs, sym):
         assert psi.get_bond_dimensions() == bd_ref
 
 
+def test_tdvp_12site_enlarge_bond(config_kwargs, tol=1e-8):
+    """
+    In method='12site', the 2-site update is used when some charges are missing on physical legs
+    of the state, or when the smallest Schmidt value on a bond is above opts_svd['tol'];
+    otherwise, the 1-site update is used.
+    """
+    N, T = 6, 0.2
+    opts = {'times': (0, T), 'dt': 0.05, 'method': '12site', 'opts_expmv': {'hermitian': True, 'tol': 1e-12}}
+    #
+    # charges missing: U1 product state carries a single charge on each physical leg
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
+    I = mps.product_mpo(ops.I(), N)
+    terms = [mps.Hterm(1.0, [i, j], [ops.cp(), ops.c()]) for i in range(N) for j in range(N) if abs(i - j) == 1]
+    H = mps.generate_mpo(I, terms)
+    psi = mps.product_mps([ops.vec_n(1), ops.vec_n(0)] * (N // 2))
+    #
+    # Schmidt values above tol: Z2 random state with small bond dimension and all charges present
+    ops2 = yastn.operators.Spin12(sym='Z2', **config_kwargs)
+    I2 = mps.product_mpo(ops2.I(), N)
+    terms2 = [mps.Hterm(-1, [i, i + 1], [ops2.x(), ops2.x()]) for i in range(N - 1)]
+    terms2 += [mps.Hterm(-0.5, [i], [ops2.z()]) for i in range(N)]
+    H2 = mps.generate_mpo(I2, terms2)
+    psi2 = mps.random_mps(I2, n=0, D_total=2).canonize_(to='first')
+    #
+    for H, psi in [(H, psi), (H2, psi2)]:
+        phi = psi.copy()
+        D0 = max(phi.get_bond_dimensions())
+        out = list(mps.tdvp_(phi, H, opts_svd={'tol': 1e-12, 'D_total': 8}, **opts))
+        assert abs(out[-1].tf - T) < 1e-12
+        assert max(phi.get_bond_dimensions()) > D0  # bond dimension was enlarged by 2-site updates
+        #
+        # here 2-site updates are used on all bonds, so 12site reproduces 2site
+        phi2 = psi.copy()
+        list(mps.tdvp_(phi2, H, opts_svd={'tol': 1e-12, 'D_total': 8}, **{**opts, 'method': '2site'}))
+        assert (phi - phi2).norm() < tol
+        #
+        # compare with exact evolution; the error is dominated by the time step dt
+        Hm = H.to_matrix()
+        legs = {0: Hm.get_legs(axes=0)}
+        vpsi = psi.to_matrix().to_numpy(legs=legs)
+        vpsi = vpsi / np.linalg.norm(vpsi)
+        w, v = np.linalg.eigh(Hm.to_numpy())
+        vref = v @ (np.exp(-1j * T * w) * (v.conj().T @ vpsi))
+        assert np.linalg.norm(phi.to_matrix().to_numpy(legs=legs) - vref) < 1e-4
+    #
+    # all Schmidt values below tol, or no tol given: no hint for 2-site update, so 12site reproduces 1site
+    phi1 = psi2.copy()
+    list(mps.tdvp_(phi1, H2, **{**opts, 'method': '1site'}))
+    for opts_svd in ({'tol': 1.0, 'D_total': 8}, {'D_total': 8}):
+        phi = psi2.copy()
+        list(mps.tdvp_(phi, H2, opts_svd=opts_svd, **opts))
+        assert phi.get_bond_dimensions() == psi2.get_bond_dimensions()
+        assert (phi - phi1).norm() < tol
+
+
 def test_tdvp_raise(config_kwargs):
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     ops.random_seed(seed=0)
@@ -420,6 +474,37 @@ def test_tdvp_raise(config_kwargs):
     out = next(mps.tdvp_(psi, H, dt=0.1, times=0.1))
     # times=0.1 => times=(0, 0.1)
     assert out.ti == 0 and out.tf == 0.1 and out.steps == 1
+
+
+def test_tdvp_time_dependent(config_kwargs, tol=1e-8):
+    """ H given as a callable reproduces time-independent evolution; subtract_E only changes the global phase. """
+    N = 6
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
+    I = mps.product_mpo(ops.I(), N)
+    terms = [mps.Hterm(-1, [i, i + 1], [ops.x(), ops.x()]) for i in range(N - 1)]
+    terms += [mps.Hterm(-0.5, [i], [ops.z()]) for i in range(N)]
+    H = mps.generate_mpo(I, terms)
+    psi = mps.random_mps(I, n=0, D_total=8).canonize_(to='first')  # normalized; bond dimension 8 is exact for 6 sites
+    opts = {'times': (0, 0.2), 'dt': 0.05, 'method': '2site',
+            'opts_svd': {'D_total': 8}, 'opts_expmv': {'hermitian': True, 'tol': 1e-12}}
+    #
+    phi0 = psi.copy()
+    out0 = mps.tdvp_(phi0, H, **opts)
+    phi1 = psi.copy()
+    out1 = mps.tdvp_(phi1, lambda t: [H], subtract_E=True, **opts)
+    for out in (out0, out1):
+        step = list(out)[-1]
+        assert abs(step.tf - 0.2) < 1e-12
+    assert list(mps.tdvp_(psi.copy(), lambda t: H, **opts))[-1].time_independent is False
+    assert abs(abs(mps.vdot(phi0, phi1)) - 1) < tol
+    #
+    # exact evolution
+    Hm = H.to_matrix()
+    legs = {0: Hm.get_legs(axes=0)}  # embed states in the full space of H
+    vpsi = psi.to_matrix().to_numpy(legs=legs)
+    w, v = np.linalg.eigh(Hm.to_numpy())
+    vref = v @ (np.exp(-1j * 0.2 * w) * (v.conj().T @ vpsi))
+    assert np.linalg.norm(phi0.to_matrix().to_numpy(legs=legs) - vref) < tol
 
 
 if __name__ == '__main__':

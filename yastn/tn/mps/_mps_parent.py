@@ -283,10 +283,19 @@ class _MpsMpoParent:
         return self.__mul__(1 / number)
 
     def virtual_leg(self, ind):
+        r"""
+        Return the virtual :class:`yastn.Leg` at the edge of MPS/MPO.
+
+        Parameters
+        ----------
+        ind : str
+            ``'first'`` for the left leg of the first site, or ``'last'`` for the right leg of the last site.
+        """
         if ind == 'first':
             return self.A[self.first].get_legs(axes=0)
         if ind == 'last':
             return self.A[self.last].get_legs(axes=2)
+        raise YastnError(f"virtual_leg: ind should be 'first' or 'last'; got {ind!r}.")
 
     def get_bond_dimensions(self) -> Sequence[int]:
         r"""
@@ -334,31 +343,6 @@ class _MpsMpoParent:
             return [self.A[n].get_legs(axes=(1, 3)) for n in self.sweep(to='last')]
         return [self.A[n].get_legs(axes=1) for n in self.sweep(to='last')]
 
-
-    def save_to_hdf5(self, file, my_address):
-        r"""
-        Save MPS/MPO into a HDF5 file.
-
-        Parameters
-        ----------
-        file: File
-            A `pointer` to a file opened by the user
-
-        my_address: str
-            Name of a group in the file, where the Mps will be saved, e.g., 'state/'
-        """
-        psi = self.shallow_copy()
-        try:
-            factor = psi.config.backend.to_numpy(psi.factor)
-        except Exception:
-            factor = psi.factor
-        psi.absorb_central_()  # make sure central block is eliminated
-        file.create_dataset(my_address+'/N', data=psi.N)
-        file.create_dataset(my_address+'/nr_phys', data=psi.nr_phys)
-        file.create_dataset(my_address+'/factor', data=factor)
-        for n in self.sweep(to='last'):
-            psi[n].save_to_hdf5(file, my_address+'/A/'+str(n))
-
     def to_matrix(self) -> Tensor:
         r"""
         Contract MPS/MPO to a single tensor and then reshape to vector/matrix by fusing all physical legs into a single leg.
@@ -397,3 +381,4 @@ class _MpsMpoParent:
             psi.pC = d['pC']
             psi.A = {k: TENSOR_CLASSES[v['type']].from_dict(v, config=config) for k, v in d['A'].items()}
             return psi
+        raise YastnError(f"{cls.__name__}.from_dict: unsupported dict_ver == {d['dict_ver']}.")

@@ -1,3 +1,12 @@
+18-11-2026
+- remove `yastn.tn.mps.MpsMpoOBC.save_to_hdf5`, as HDF5 is no longer supported; use `to_dict` / `from_dict`.
+  `h5py` is no longer a dependency.
+- `yastn.tn.mps.MpsMpoOBC.virtual_leg` raises `YastnError` for `ind` other than `'first'` or `'last'`
+  (previously returned `None`).
+- `yastn.tn.mps.MpsMpoOBC.from_dict` raises `YastnError` for an unsupported `dict_ver` (previously returned `None`).
+- `yastn.truncation_mask` with the default `tol` / `tol_block` (no tolerance) keeps an all-zero spectrum up to
+  `D_total` / `D_block`; previously `-inf * 0` gave `nan` (with a numpy `RuntimeWarning`) and all values were truncated.
+
 16-11-2026
 - new `yastn.operators.ColorfulFermions` with predefined operators for fermions with three color species
   (`'r'`, `'g'`, `'b'`; 8-dimensional local space) in `Z2`, `U1`, `U1xU1xU1` (distinguishable species) and
@@ -173,8 +182,7 @@
   `svd_lowrank` calls `svd` with policy = `lowrank`
 
 06-01-2022
-- change function names `export_to_dict` to `save_to_dict`, `export_to_hdf5` to `save_to_hdf5`
-  `import_from_dict` to `load_from_dict`; `import_from_hdf5` to `load_from_hdf5`
+- change function names `export_to_dict` to `save_to_dict` and `import_from_dict` to `load_from_dict`
 - save/load functions are changed to use 1d data container.
   It is now also more robust, using only native python/numpy data structures, i.e. no NamedTuples used by yastn.
   WARNING: Backward compatibility is broken!

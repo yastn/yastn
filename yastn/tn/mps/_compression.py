@@ -352,19 +352,11 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
     tmp = eye(psi.config, legs=lmpo, isdiag=False)
     tmp = tmp.tensordot(eye(psi.config, legs=lpsi, isdiag=False), axes=((), ()))
     tmp = tmp.transpose(axes=(3, 0, 1, 2))
-    # tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
-    # tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
-
-    connector = eye(psi.config, legs=lmpo, isdiag=False)
 
     discarded2_total = 0.
     for n in psi.sweep(to='first'):
         tmp = psi[n].tensordot(tmp, axes=(2, 0))
-        #if psi.nr_phys == 1:
         tmp = tmp.fuse_legs(axes=((0, 2), 1, 3, 4))
-        # else:  # psi.nr_phys == 2:
-        #     tmp = tmp.swap_gate(axes=(2, 3))
-        #     tmp = tmp.fuse_legs(axes=((0, 3), 1, 4, (5, 2)))
         tmp = a[n].tensordot(tmp, axes=((2, 3), (2, 1)))
 
         if n > psi.first:
@@ -383,17 +375,10 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
             if nS:
                 S = S / nS
             tmp = (U @ S).unfuse_legs(axes=0)
-
-            if a.tol is not None and a.tol > 0:
-                Uc, Sc, Vc = tmp.svd_with_truncation(axes=(1, (0, 2, 3)), tol=a.tol)
-                tmp = (Sc @ Vc).transpose(axes=(1, 0, 2, 3))
-                connector = connector @ Uc
-
             psi.factor = psi.factor * nS
         else:  # n == first
             tmp = tmp.unfuse_legs(axes=2)
-            tmp = connector.tensordot(tmp, axes=(1, 3))
-            tmp = tmp.trace(axes=(0, 1))
+            tmp = tmp.trace(axes=(0, 3))
             ntmp = tmp.norm()
             psi.factor = 1 if normalize else psi.factor * ntmp
             if ntmp:

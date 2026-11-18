@@ -37,13 +37,13 @@ jobs:
 
     steps:
       - run: CI=false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install system packages
         run: |
           sudo apt-get update
           sudo apt-get install -y libblas-dev liblapack-dev gfortran
       - name: setup python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -63,7 +63,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest -v;
+          pytest -v --random-order;
           pytest -v --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --tensordot_policy no_fusion ./tests/tensor;
 
@@ -79,13 +79,13 @@ jobs:
 
     steps:
       - run: CI=false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install system packages
         run: |
           sudo apt-get update
           sudo apt-get install -y libblas-dev liblapack-dev gfortran
       - name: setup python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -97,7 +97,7 @@ jobs:
 
       - name: setup pytorch
         run: |
-            pip install torch==2.10 --index-url https://download.pytorch.org/whl/cpu
+            pip install "torch==2.10.*" --index-url https://download.pytorch.org/whl/cpu
 
       - name: static analysis flake8
         # rules are configured in .flake8
@@ -112,7 +112,7 @@ jobs:
         run: |
           pytest -v --backend torch --tensordot_policy fuse_to_matrix  ./tests/tensor;
           pytest -v --backend torch --tensordot_policy no_fusion ./tests/tensor;
-          pytest -n 4 -v --backend torch ./tests/peps;
+          pytest -n 4 -v --random-order --backend torch ./tests/peps;
 
 
   deploy-docs:
@@ -138,20 +138,20 @@ jobs:
       matrix:
         include:
           - backend: np
-            python_v: '3.10'
+            python_v: '3.11'
             numpy_v: '1.26.4'
             scipy_v: '1.11.4'
             torch_v: 'none'
           - backend: torch
-            python_v: '3.10'
+            python_v: '3.11'
             numpy_v: '1.26.4'
             scipy_v: '1.13.1'
-            torch_v: '2.10'
+            torch_v: '2.10.*'
           - backend: torch
             python_v: '3.12'
-            numpy_v: '2.4'
-            scipy_v: '1.16'
-            torch_v: '2.10'
+            numpy_v: '2.4.*'
+            scipy_v: '1.16.*'
+            torch_v: '2.10.*'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -159,7 +159,7 @@ jobs:
       - run: CI=false
 
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Runs a single command using the runners shell
       # - name: Run a one-line script
@@ -172,25 +172,25 @@ jobs:
           sudo apt-get install -y libblas-dev liblapack-dev gfortran
 
       - name: setup python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
         run: |
-          pip install numpy==${{ matrix.numpy_v }};
-          pip install scipy==${{ matrix.scipy_v }};
+          pip install "numpy==${{ matrix.numpy_v }}";
+          pip install "scipy==${{ matrix.scipy_v }}";
           pip install .[test]
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
         run: |
-            pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu
+            pip install "torch==${{ matrix.torch_v }}" --index-url https://download.pytorch.org/whl/cpu
 
       # Run tests
       - name: tests
         run: |
-          pytest -n 4 -v --backend ${{ matrix.backend }} ./tests;
+          pytest -n 4 -v --random-order --backend ${{ matrix.backend }} ./tests;
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy no_fusion ./tests/tensor;
 
@@ -203,14 +203,14 @@ jobs:
       matrix:
         include:
           - python_v: '3.12'
-            numpy_v: '2.4'
-            scipy_v: '1.16'
-            torch_v: '2.10'
+            numpy_v: '2.4.*'
+            scipy_v: '1.16.*'
+            torch_v: '2.10.*'
       fail-fast: true
 
     steps:
       - run: CI=false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install system packages
         run: |
@@ -218,20 +218,20 @@ jobs:
           sudo apt-get install -y libblas-dev liblapack-dev gfortran
 
       - name: setup python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
         run: |
-          pip install numpy==${{ matrix.numpy_v }};
-          pip install scipy==${{ matrix.scipy_v }};
-          pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu;
+          pip install "numpy==${{ matrix.numpy_v }}";
+          pip install "scipy==${{ matrix.scipy_v }}";
+          pip install "torch==${{ matrix.torch_v }}" --index-url https://download.pytorch.org/whl/cpu;
           pip install .[test]
 
       - name: Run tests and collect coverage
         run: |
-          pytest -n 4 -v --cov=yastn --cov-report=xml --backend torch ./tests;
+          pytest -n 4 -v --random-order --cov=yastn --cov-report=xml --backend torch ./tests;
           pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy no_fusion --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy no_fusion --cov-append ./tests/tensor;
@@ -239,6 +239,6 @@ jobs:
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
 
       - name: Upload coverage reports to Codecov with GitHub Action
-        uses: codecov/codecov-action@v4.2.0
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

@@ -275,42 +275,6 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
         return tmp
 
 
-# def load_from_hdf5(config, file, path) -> Tensor:
-#     """
-#     Create tensor from hdf5 file.
-
-#     Parameters
-#     ----------
-#     config: module | _config(NamedTuple)
-#         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-#     file:
-#         pointer to opened HDF5 file.
-#     path:
-#         path inside the file which contains the state.
-#     """
-#     g = file.get(path)
-#     c_isdiag = bool(g.get('isdiag')[:][0])
-#     c_n = tuple(g.get('n')[:].tolist())
-#     c_s = tuple(g.get('s')[:].tolist())
-#     c_t = tuple(tuple(x) for x in g.get('ts')[:].tolist())
-#     c_D = tuple(tuple(x) for x in g.get('Ds')[:].tolist())
-#     c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1, dtype=np.int64).tolist()
-#     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-#     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
-#     legs = legs_from_struct(struct)
-#     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp), legs=legs)
-
-#     mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
-#     hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
-#                 for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
-#     c = Tensor(config=config, struct=struct, slices=slices, mfs=mfs, hfs=hfs)
-
-#     vmat = g.get('matrix')[:]
-#     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
-#     c.is_consistent()
-#     return c
-
-
 def block(tensors, common_legs=None) -> Tensor:
     """
     Assemble new tensor by blocking a group of tensors.

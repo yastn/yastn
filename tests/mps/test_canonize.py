@@ -58,6 +58,11 @@ def check_canonize(psi, tol=1e-12):
         assert len(psi.A) == len(psi)
         assert abs(psi.factor / norm - 1) < tol
         assert abs(mps.vdot(psi, psi) / norm ** 2 - 1) < tol
+        #
+        # without a central block, diagonalize_central_ does nothing
+        A, factor = dict(psi.A), psi.factor
+        assert psi.diagonalize_central_(opts_svd={'D_total': 1}) == 0
+        assert psi.factor == factor and all(psi[k] is A[k] for k in A)
 
     for to in ('last', 'first'):
         phi = psi.shallow_copy()
