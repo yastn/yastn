@@ -63,9 +63,9 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest -v --random-order;
-          pytest -v --tensordot_policy fuse_to_matrix ./tests/tensor;
-          pytest -v --tensordot_policy no_fusion ./tests/tensor;
+          pytest -n 4 -v --random-order --durations=20;
+          pytest -n 4 -v --tensordot_policy fuse_to_matrix ./tests/tensor;
+          pytest -n 4 -v --tensordot_policy no_fusion ./tests/tensor;
 
   # runs basic tests on torch backend.
   test-basic-torch-peps:
